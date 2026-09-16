@@ -31,15 +31,33 @@ candidates. No `.cmd`/Node wrapper is launched. The owned process is hidden,
 limited to 20 seconds, and terminated/reaped after the read; no inference or
 login command is sent. Existing HTTP 429 backoff and five-minute polling remain.
 
-The main ring/tray selects only core `primary`/`secondary` windows, never a Spark
-or code-review replacement. App-server multi-bucket replies prefer `codex`;
-rollout fallback ignores explicitly different bucket ids and finds resumed
-threads by modification time even in older date directories. Missing data is
+The main ring/tray selects only core `primary`, never a weekly, Spark or
+code-review replacement. If `primary` is absent the headline stays blank;
+`secondary` remains available to the separate weekly ring. App-server
+multi-bucket replies prefer `codex`. Rollout fallback ignores explicitly different
+bucket ids and, like macOS, reads the latest eight non-archived paths from
+`state_5.sqlite` using a read-only, WAL-aware connection (50 ms busy timeout).
+This finds resumed threads without scanning every session file. If the index
+is unavailable, the original three-date-directory scan remains the fallback;
+old resumed threads cannot be discovered through that scan alone. Missing data is
 not a zero. Percentages retain the existing **used** semantics; this is quota
 utilization, not an exact token count or a model-specific allowance.
 
+Why launch a process at all? A borrowed stored-token HTTP read can fail while
+the installed Codex client can still authenticate. The native client owns its
+managed OAuth lifecycle and can recover live quotas without Codenotch copying
+its refresh logic. This is not guaranteed for externally managed credentials
+that require a host app: if it cannot read the quota, the usual stale/missing
+rollout status remains. Unlike the old unconditional wrapper-based path, this
+recovery runs only after HTTP failure, directly owns a native executable, and
+does not use `taskkill` or launch a Node/cmd tree. Codenotch sends no login or
+explicit token-refresh request; Codex may perform its own normal managed refresh.
+
 Regression checks: `cargo test --locked` and `node --test test-codex-headline.cjs`
 from `windows/`. Tests use synthetic quota fixtures, not account credentials.
+The optional `cargo test --release --locked codex::tests::live_native_quota -- --ignored`
+checks the actual native transport against an already signed-in local client;
+it prints no account credentials or quota values and is not run by CI.
 
 ### Antigravity
 

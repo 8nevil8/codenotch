@@ -11,6 +11,9 @@
 //!      account/rateLimits/read using Codex's own authentication. No cmd/node wrapper is spawned;
 //!      the owned process is hidden, bounded to 20 seconds, killed and reaped. The explicit
 //!      `codex` bucket wins over the legacy single-bucket view, which can refer to Spark.
+//!      This is recovery for a stored-token HTTP failure while the installed client can still
+//!      authenticate, not the old unconditional cmd/node process tree removed in 1.5.0.
+//!      Codex owns any managed OAuth refresh; Codenotch sends no login/refresh request itself.
 //!   3. Fallback: Codex writes the limits it saw on each turn into the thread's rollout log
 //!      `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, as lines like
 //!      `{"timestamp":"…","type":"event_msg","payload":{"type":"token_count","rate_limits":{
@@ -19,10 +22,9 @@
 //!      The reset is **resets_at, absolute seconds** (the documented resets_in_seconds is accepted
 //!      too). This is the number from the *last run* — reading a file always succeeds instantly, so
 //!      the reading is marked stale by the line's own timestamp (> 5 min).
-//!      Upstream finds the newest rollout through the thread index in state_5.sqlite; this port
-//!      walks all dated directories and picks by mtime (resumed threads retain their creation
-//!      directory), with no SQLite involved (and
-//!      none of the immutable/WAL pitfalls).
+//!      Like macOS, prefer the thread index in state_5.sqlite (read-only, WAL-aware, at most
+//!      eight paths). If unavailable, retain the bounded three-date-directory scan. A resumed
+//!      old thread keeps its creation directory, but the index records its latest activity.
 //!
 //! Credentials are borrowed, never managed: the numbers come from Codex's own sign-in and Codex's
 //! own endpoint. No sign-in and no session history at all means absent (no cell is shown).
@@ -369,15 +371,41 @@ fn windows_from_usage(v: &serde_json::Value) -> Vec<LimitWindow> {
 
 /// Creation dates do not indicate activity: resumed threads keep their original directory.
 pub fn newest_rollout() -> Option<PathBuf> {
-    let root = codex_home()?.join("sessions");
-    newest_rollout_in(&root)
+    newest_rollout_in(&codex_home()?)
 }
 
-fn newest_rollout_in(root: &Path) -> Option<PathBuf> {
+fn newest_rollout_in(home: &Path) -> Option<PathBuf> {
+    indexed_rollout(&home.join("state_5.sqlite"))
+        .or_else(|| newest_recent_rollout(&home.join("sessions")))
+}
+
+fn indexed_rollout(database: &Path) -> Option<PathBuf> {
+    use rusqlite::{Connection, OpenFlags};
+    // No immutable=1: resumed-thread updates may still be in the writer's WAL.
+    // Never create/migrate the database; schema changes or contention use the bounded fallback.
+    let db = Connection::open_with_flags(
+        database, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    ).ok()?;
+    db.busy_timeout(Duration::from_millis(50)).ok()?;
+    let mut query = db.prepare(
+        "SELECT rollout_path FROM threads WHERE archived = 0 ORDER BY updated_at_ms DESC LIMIT 8",
+    ).or_else(|_| db.prepare(
+        "SELECT rollout_path FROM threads WHERE archived = 0 ORDER BY updated_at DESC LIMIT 8",
+    )).ok()?;
+    let paths = query.query_map([], |row| row.get::<_, String>(0)).ok()?;
+    let found = paths.filter_map(Result::ok).map(PathBuf::from).find(|path| {
+        path.file_name().and_then(|name| name.to_str())
+            .map(|name| name.starts_with("rollout-") && name.ends_with(".jsonl"))
+            .unwrap_or(false) && path.is_file()
+    });
+    found
+}
+
+fn newest_recent_rollout(root: &Path) -> Option<PathBuf> {
     let mut days: Vec<PathBuf> = Vec::new();
     let mut years = list_dirs(root);
     years.sort_by(|a, b| b.cmp(a));
-    for y in years {
+    'outer: for y in years {
         let mut months = list_dirs(&y);
         months.sort_by(|a, b| b.cmp(a));
         for m in months {
@@ -385,6 +413,9 @@ fn newest_rollout_in(root: &Path) -> Option<PathBuf> {
             ds.sort_by(|a, b| b.cmp(a));
             for d in ds {
                 days.push(d);
+                if days.len() >= 3 {
+                    break 'outer;
+                }
             }
         }
     }
@@ -812,21 +843,71 @@ mod tests {
         let root = std::env::temp_dir().join(format!("codenotch-rollout-test-{}-{}", std::process::id(), now_ms()));
         std::fs::create_dir(&root).unwrap();
         for day in ["2026/07/31", "2026/09/10", "2026/09/11", "2026/09/12"] {
-            std::fs::create_dir_all(root.join(day)).unwrap();
+            std::fs::create_dir_all(root.join("sessions").join(day)).unwrap();
         }
         let earlier = UNIX_EPOCH + Duration::from_secs(1700000000);
         for day in ["2026/09/10", "2026/09/11", "2026/09/12"] {
-            let file = std::fs::File::create(root.join(day).join("rollout-inactive.jsonl")).unwrap();
+            let file = std::fs::File::create(root.join("sessions").join(day).join("rollout-inactive.jsonl")).unwrap();
             file.set_times(std::fs::FileTimes::new().set_modified(earlier)).unwrap();
         }
-        let active = root.join("2026/07/31/rollout-active.jsonl");
+        let active = root.join("sessions/2026/07/31/rollout-active.jsonl");
         std::fs::write(&active, "{}").unwrap();
+        // The bounded directory fallback intentionally cannot see this old directory.
+        assert_ne!(newest_rollout_in(&root), Some(active.clone()));
+        assert!(!root.join("state_5.sqlite").exists(), "read-only lookup must not create a database");
+        let db = rusqlite::Connection::open(root.join("state_5.sqlite")).unwrap();
+        db.execute_batch("PRAGMA journal_mode=WAL;
+            CREATE TABLE threads (rollout_path TEXT, archived INTEGER, updated_at_ms INTEGER);
+            CREATE INDEX recent_threads ON threads(archived, updated_at_ms DESC);").unwrap();
+        db.execute("INSERT INTO threads VALUES (?1, 0, 100)", [active.to_str().unwrap()]).unwrap();
+        // Keep the writer open: the read-only connection must see the committed WAL update.
         assert_eq!(newest_rollout_in(&root), Some(active.clone()));
-        // The same creation directory can become inactive again; select by modification time.
-        std::fs::File::options().write(true).open(&active).unwrap()
-            .set_times(std::fs::FileTimes::new().set_modified(earlier - Duration::from_secs(60))).unwrap();
+        db.execute("UPDATE threads SET archived = 1", []).unwrap();
         assert_ne!(newest_rollout_in(&root), Some(active));
+        drop(db);
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rollout_index_skips_missing_paths_and_accepts_legacy_timestamp_column() {
+        let root = std::env::temp_dir().join(format!("codenotch-index-test-{}-{}", std::process::id(), now_ms()));
+        std::fs::create_dir(&root).unwrap();
+        let database = root.join("state_5.sqlite");
+        let active = root.join("rollout-active.jsonl");
+        std::fs::write(&active, "{}").unwrap();
+        let db = rusqlite::Connection::open(&database).unwrap();
+        db.execute_batch("CREATE TABLE threads (rollout_path TEXT, archived INTEGER, updated_at INTEGER);").unwrap();
+        db.execute("INSERT INTO threads VALUES (?1, 0, 1)", [active.to_str().unwrap()]).unwrap();
+        db.execute("INSERT INTO threads VALUES (?1, 0, 2)", [root.join("rollout-missing.jsonl").to_str().unwrap()]).unwrap();
+        assert_eq!(indexed_rollout(&database), Some(active));
+        // Bound file metadata work even when the newest entries are unavailable.
+        for stamp in 3..10 {
+            db.execute("INSERT INTO threads VALUES ('rollout-missing.jsonl', 0, ?1)", [stamp]).unwrap();
+        }
+        assert_eq!(indexed_rollout(&database), None);
+        drop(db);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn corrupt_rollout_index_uses_bounded_directory_fallback() {
+        let root = std::env::temp_dir().join(format!("codenotch-index-fallback-{}-{}", std::process::id(), now_ms()));
+        let day = root.join("sessions/2026/09/16");
+        std::fs::create_dir_all(&day).unwrap();
+        let active = day.join("rollout-active.jsonl");
+        std::fs::write(&active, "{}").unwrap();
+        std::fs::write(root.join("state_5.sqlite"), "not a SQLite database").unwrap();
+        assert_eq!(newest_rollout_in(&root), Some(active));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[ignore = "Reads quota through the installed signed-in native Codex client; opt in explicitly"]
+    fn live_native_quota() {
+        let snap = read_app_server().expect("native quota read should succeed for this signed-in client");
+        assert_eq!(snap.status, "ok");
+        assert!(!snap.windows.is_empty());
+        assert!(snap.windows.iter().all(|window| matches!(window.id.as_str(), "primary" | "secondary")));
     }
 
     fn windows(json: &str) -> Vec<LimitWindow> {

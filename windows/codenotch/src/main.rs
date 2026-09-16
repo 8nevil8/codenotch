@@ -639,7 +639,7 @@ fn ring_window<'a>(
     let by_id = |id: &str| windows.iter().find(|w| w.id == id);
     match provider {
         "claude" => by_id("session"),
-        "codex" => by_id("primary").or_else(|| by_id("secondary")),
+        "codex" => by_id("primary"),
         "cursor" => by_id("included").or_else(|| by_id("api")),
         _ => antigravity_lane(windows, antigravity_limit, antigravity_model),
     }
@@ -1371,7 +1371,8 @@ mod tests {
     #[test]
     fn codex_never_substitutes_an_extra_bucket_for_core_usage() {
         assert_eq!(pick("codex", &[win("spark", 0.1), win("primary", 0.32)]), Some("primary"));
-        assert_eq!(pick("codex", &[win("spark", 0.1), win("secondary", 0.4)]), Some("secondary"));
+        assert_eq!(pick("codex", &[win("spark", 0.1), win("secondary", 0.4)]), None);
+        assert_eq!(pick("codex", &[win("secondary", 0.4)]), None);
         assert_eq!(pick("codex", &[win("spark", 0.1), win("code-review", 0.2)]), None);
     }
 
