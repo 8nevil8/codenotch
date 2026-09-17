@@ -239,16 +239,23 @@ pub fn place_notch(app: &AppHandle) {
     }
 }
 
-/// Older entry point name still used by tray.rs. Recentre also brings the notch back to the primary
-/// monitor's right edge: a notch lost on a screen that has since been unplugged is exactly what this
-/// button is for, so the monitor choice has to go with the position.
+/// Older entry point name still used by tray.rs. Recentre puts the notch in the middle of the edge it
+/// is on, and only sends it home to the primary monitor's right edge when the screen it was on is
+/// gone — which is the case the button exists for, and the one where its own edge means nothing.
 pub fn reset_bar(app: &AppHandle) {
+    let stranded = {
+        let st = app.state::<AppState>();
+        let want = st.cfg.lock().unwrap().notch_monitor.clone();
+        want.is_some_and(|name| !screens(app).iter().any(|s| s.name.as_deref() == Some(name.as_str())))
+    };
     {
         let st = app.state::<AppState>();
         let mut c = st.cfg.lock().unwrap();
         c.notch_y = 0.5;
-        c.notch_edge = "right".into();
-        c.notch_monitor = None;
+        if stranded {
+            c.notch_edge = "right".into();
+            c.notch_monitor = None;
+        }
         config::save(&c);
     }
     place_notch(app);
@@ -343,6 +350,9 @@ fn begin_move(app: AppHandle, depth: f64, length: f64) {
                 let st = app.state::<AppState>();
                 let mut c = st.cfg.lock().unwrap();
                 c.notch_edge = target.clone();
+                // Centred, because the zone that was shown is centred: it lands where it was offered,
+                // not at whatever fraction along it happened to sit on the edge it came from
+                c.notch_y = 0.5;
                 config::save(&c);
             }
             place_notch(&app);

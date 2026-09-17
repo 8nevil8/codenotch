@@ -160,7 +160,7 @@
             <select id="screen" aria-label="Screen"></select>
           </div>
           <div class="item cap" id="cap-screen" data-dynamic hidden></div>
-          <div class="item"><span class="hint">The pill can also be dragged: pick it up and drop it anywhere, and it snaps to the nearest edge of the screen you dropped it on. If it has ended up somewhere you cannot see it — off a screen you have unplugged, say — this puts it back in the middle of the main screen's right-hand edge.</span><button class="btn" id="btn-recentre">Recentre</button></div>
+          <div class="item"><span class="hint">The pill can also be dragged: pick it up and drop it anywhere, and it snaps to the nearest edge of the screen you dropped it on. Recentre puts it back in the middle of the edge it is on, or on the main screen's right-hand edge if the screen it was on has been unplugged.</span><button class="btn" id="btn-recentre">Recentre</button></div>
         </div>
         <div class="sec">App</div>
         <div class="group">
@@ -254,7 +254,6 @@ const RU_STATIC = {
   'The notch stays open with every reading visible.':'Выемка остаётся открытой, и все данные видны.',
   'The black pill against the right-hand edge of the screen, with one ring per tool. Turn it off and the pill disappears; Codenotch keeps counting your usage either way.':'Чёрная панель у правого края экрана с отдельным кольцом для каждого инструмента. При выключении панель исчезает, но Codenotch продолжает считать использование.',
   'Recentre':'По центру',
-  'The pill can be dragged up and down the right-hand edge. If it has ended up somewhere you cannot see it — off the bottom of a screen you have unplugged, say — this drops it back into the middle of the edge.':'Панель можно перетаскивать вверх и вниз вдоль правого края. Если она оказалась за пределами экрана, эта кнопка возвращает её в середину края.',
   'The notch is back in the middle':'Панель возвращена в центр',
   'App':'Приложение', 'App icon':'Значок приложения', 'System tray':'Системный трей', 'Neither':'Ни то ни другое',
   'The small icon down by the clock. Right-clicking it opens this window, refreshes the readings, or quits Codenotch.':'Небольшой значок рядом с часами. Щелчок правой кнопкой открывает это окно, обновляет данные или завершает работу Codenotch.',
@@ -309,7 +308,6 @@ const ZH_STATIC = {
   'The notch stays open with every reading visible.':'刘海保持展开，所有读数都看得见。',
   'The black pill against the right-hand edge of the screen, with one ring per tool. Turn it off and the pill disappears; Codenotch keeps counting your usage either way.':'屏幕右侧边缘的黑色胶囊，每个工具对应一个圆环。关闭它后胶囊会消失；无论哪种情况，Codenotch 都会继续统计你的使用情况。',
   'Recentre':'重新居中',
-  'The pill can be dragged up and down the right-hand edge. If it has ended up somewhere you cannot see it — off the bottom of a screen you have unplugged, say — this drops it back into the middle of the edge.':'可以在右侧边缘上下拖动胶囊。如果它移动到了你看不到的地方（例如，被拔掉的显示器屏幕底部之外），此操作会将其重置回边缘中间。',
   'The notch is back in the middle':'刘海已回到中间',
   'App':'应用',
   'App icon':'应用图标',
@@ -375,7 +373,6 @@ const JA_STATIC = {
   'The notch stays open with every reading visible.':'ノッチは開いたままで、すべての読み取りが見えます。',
   'The black pill against the right-hand edge of the screen, with one ring per tool. Turn it off and the pill disappears; Codenotch keeps counting your usage either way.':'画面の右端にある黒いピルには、ツールごとに1つのリングが表示されます。オフにするとピルは消えますが、どちらにしても Codenotch は使用量のカウントを続けます。',
   'Recentre':'中央に戻す',
-  'The pill can be dragged up and down the right-hand edge. If it has ended up somewhere you cannot see it — off the bottom of a screen you have unplugged, say — this drops it back into the middle of the edge.':'ピルは右端に沿って上下にドラッグできます。もし見えない場所（例えば、取り外した画面の下部など）に行ってしまった場合、これを使うと端の中央に戻せます。',
   'The notch is back in the middle':'ノッチが中央に戻りました',
   'App':'アプリ',
   'App icon':'アプリアイコン',
@@ -450,10 +447,8 @@ const KO_STATIC = {
   'Lies flat along the bottom edge, with the card opening above it.':'화면 아래쪽 가장자리에 가로로 눕고, 카드는 위로 열립니다.',
   'Which screen the notch lives on. Dragging it onto another screen sets this too.':'노치를 표시할 화면입니다. 노치를 다른 화면으로 끌어다 놓아도 이 값이 바뀝니다.',
   'this screen cannot be remembered by name':'이 화면은 이름으로 기억할 수 없습니다',
-  'The pill can also be dragged: pick it up and drop it anywhere, and it snaps to the nearest edge of the screen you dropped it on. If it has ended up somewhere you cannot see it — off a screen you have unplugged, say — this puts it back in the middle of the main screen\'s right-hand edge.':'필을 끌어서 옮길 수도 있습니다. 아무 데나 놓으면 놓은 화면의 가장 가까운 가장자리에 달라붙습니다. 뽑아버린 모니터 쪽 등 보이지 않는 곳으로 가버렸다면, 이 버튼이 주 화면 오른쪽 가장자리 가운데로 되돌립니다.',
   'The black pill against the right-hand edge of the screen, with one ring per tool. Turn it off and the pill disappears; Codenotch keeps counting your usage either way.':'화면 오른쪽 가장자리에 있는 검은색 필로, 도구당 하나의 링이 있습니다. 끄면 필이 사라지지만, 어느 쪽이든 Codenotch는 사용량을 계속 계산합니다.',
   'Recentre':'가운데로 되돌리기',
-  'The pill can be dragged up and down the right-hand edge. If it has ended up somewhere you cannot see it — off the bottom of a screen you have unplugged, say — this drops it back into the middle of the edge.':'필은 오른쪽 가장자리를 따라 위아래로 드래그할 수 있습니다. 만약 보이지 않는 곳(예: 연결 해제된 화면의 하단 밖)으로 이동한 경우, 이것을 사용하면 가장자리 중앙으로 다시 가져옵니다.',
   'The notch is back in the middle':'노치가 중앙으로 돌아왔습니다',
   'App':'앱',
   'App icon':'앱 아이콘',
