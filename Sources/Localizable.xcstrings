@@ -5041,49 +5041,49 @@
         }
       }
     },
-    "macOS is not letting Codenotch read %@'s saved login. Choose Allow access… above, then Always Allow.": {
+    "Codenotch is not reading %@'s saved login. Choose Allow access… above and answer Allow.": {
       "extractionState": "manual",
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "macOS n'autorise pas Codenotch à lire les identifiants enregistrés de %@. Choisissez Autoriser l'accès… ci-dessus, puis Toujours autoriser."
+            "value": "Codenotch ne lit pas la connexion enregistrée de %@. Choisissez Autoriser l'accès… ci-dessus et répondez Autoriser."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "macOS が %@ の保存済みログインの読み取りを許可していません。上の「アクセスを許可…」を選び、「常に許可」を選んでください。"
+            "value": "Codenotch は %@ の保存済みログインを読んでいません。上の「アクセスを許可…」を選び、「許可」と答えてください。"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "O macOS não está deixando o Codenotch ler o login salvo do %@. Escolha Permitir acesso… acima e depois Sempre Permitir."
+            "value": "O Codenotch não está lendo o login salvo de %@. Escolha Permitir acesso… acima e responda Permitir."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "macOS 不让 Codenotch 读取 %@ 已保存的登录信息。点上面的「允许访问…」，然后选「始终允许」。"
+            "value": "Codenotch 没有读取 %@ 保存的登录信息。请在上方选择“允许访问…”，然后选择“允许”。"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "macOS не разрешает Codenotch читать сохранённый вход %@. Выберите выше «Разрешить доступ…», затем «Разрешать всегда»."
+            "value": "Codenotch не читает сохранённый вход %@. Выберите «Разрешить доступ…» выше и ответьте «Разрешить»."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "macOS erlaubt Codenotch nicht, die gespeicherte Anmeldung von %@ zu lesen. Wähle oben „Zugriff erlauben…“ und dann „Immer erlauben“."
+            "value": "Codenotch liest die gespeicherte Anmeldung von %@ nicht. Wähle oben „Zugriff erlauben…“ und antworte mit „Erlauben“."
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "macOS не дає Codenotch прочитати збережений вхід %@. Виберіть вище «Дозволити доступ…», потім «Завжди дозволяти»."
+            "value": "Codenotch не читає збережений вхід %@. Виберіть «Дозволити доступ…» вище й дайте відповідь «Дозволити»."
           }
         }
       }
@@ -13730,49 +13730,49 @@
         }
       }
     },
-    "macOS will ask once for permission to read Claude Code's, Antigravity's and cursor-agent's saved logins. Choose Always Allow — plain Allow makes it ask again every time.": {
+    "macOS may ask before Codenotch reads Claude Code's, Antigravity's or cursor-agent's saved login. Background refreshes never show that question; it appears only when you click Allow access…, and Deny stops Codenotch reading that login until you ask again.": {
       "extractionState": "manual",
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "macOS demandera une fois l'autorisation de lire les identifiants enregistrés de Claude Code, d'Antigravity et de cursor-agent. Choisissez Toujours autoriser — un simple Autoriser fait redemander à chaque fois."
+            "value": "macOS peut demander l'autorisation avant que Codenotch lise la connexion enregistrée de Claude Code, d'Antigravity ou de cursor-agent. Les actualisations en arrière-plan n'affichent jamais cette question ; elle n'apparaît que lorsque vous cliquez sur Autoriser l'accès…, et Refuser empêche Codenotch de lire cette connexion jusqu'à ce que vous redemandiez."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "macOS は Claude Code、Antigravity、cursor-agent の保存済みログインを読み取る許可を一度だけ尋ねます。「常に許可」を選んでください。「許可」だけでは毎回尋ねられます。"
+            "value": "Codenotch が Claude Code・Antigravity・cursor-agent の保存済みログインを読む前に、macOS が確認することがあります。バックグラウンドの更新でこの確認が表示されることはなく、「アクセスを許可…」をクリックしたときだけ表示されます。「拒否」を選ぶと、もう一度求めるまで Codenotch はそのログインを読みません。"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "O macOS pedirá uma vez permissão para ler os logins salvos do Claude Code, do Antigravity e do cursor-agent. Escolha Sempre Permitir — o Permitir comum faz com que ele pergunte de novo toda vez."
+            "value": "O macOS pode perguntar antes de o Codenotch ler o login salvo do Claude Code, do Antigravity ou do cursor-agent. As atualizações em segundo plano nunca mostram essa pergunta; ela só aparece quando você clica em Permitir acesso…, e Negar impede o Codenotch de ler esse login até você pedir de novo."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "macOS 会询问一次，是否允许读取 Claude Code、Antigravity 和 cursor-agent 已保存的登录信息。请选「始终允许」— 只选「允许」的话，每次都会再问。"
+            "value": "Codenotch 读取 Claude Code、Antigravity 或 cursor-agent 保存的登录信息前，macOS 可能会先询问。后台刷新从不弹出这个询问；只有点击“允许访问…”时才会出现，选择“拒绝”后，在你再次请求之前 Codenotch 不会读取该登录信息。"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "macOS один раз запросит доступ к сохранённым входам Claude Code, Antigravity и cursor-agent. Выберите «Разрешать всегда» — обычное «Разрешить» приводит к повторному запросу."
+            "value": "macOS может спросить разрешение, прежде чем Codenotch прочитает сохранённый вход Claude Code, Antigravity или cursor-agent. Фоновые обновления никогда не показывают этот вопрос: он появляется только после нажатия «Разрешить доступ…», а «Запретить» не даёт Codenotch читать этот вход, пока вы не спросите снова."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "macOS fragt einmal um Erlaubnis, die gespeicherten Anmeldungen von Claude Code, Antigravity und cursor-agent zu lesen. Wähle „Immer erlauben“ — bei einfachem „Erlauben“ fragt es jedes Mal erneut."
+            "value": "macOS kann fragen, bevor Codenotch die gespeicherte Anmeldung von Claude Code, Antigravity oder cursor-agent liest. Hintergrundaktualisierungen zeigen diese Frage nie; sie erscheint nur, wenn du auf „Zugriff erlauben…“ klickst, und „Ablehnen“ verhindert, dass Codenotch diese Anmeldung liest, bis du erneut fragst."
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "macOS один раз запитає дозвіл на читання збережених входів Claude Code, Antigravity та cursor-agent. Виберіть «Завжди дозволяти» — зі звичайним «Дозволити» запит повторюватиметься щоразу."
+            "value": "macOS може запитати дозвіл, перш ніж Codenotch прочитає збережений вхід Claude Code, Antigravity або cursor-agent. Фонові оновлення ніколи не показують цього запитання: воно з'являється лише після натискання «Дозволити доступ…», а «Заборонити» не дає Codenotch читати цей вхід, доки ви не запитаєте знову."
           }
         }
       }
@@ -22796,6 +22796,53 @@
     },
     "Dashed weekly ring": {
       "extractionState": "manual"
+    },
+    "Asks macOS for %@'s saved login again. Deny stops Codenotch reading it until you ask again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fragt macOS erneut nach der gespeicherten Anmeldung von %@. „Ablehnen“ verhindert, dass Codenotch sie liest, bis du erneut fragst."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redemande à macOS la connexion enregistrée de %@. Refuser empêche Codenotch de la lire jusqu'à ce que vous redemandiez."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ の保存済みログインをもう一度 macOS に求めます。「拒否」を選ぶと、もう一度求めるまで Codenotch はそれを読みません。"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pede de novo ao macOS o login salvo de %@. Negar impede o Codenotch de lê-lo até você pedir de novo."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Снова запрашивает у macOS сохранённый вход %@. «Запретить» не даёт Codenotch читать его, пока вы не спросите снова."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Знову запитує в macOS збережений вхід %@. «Заборонити» не дає Codenotch читати його, доки ви не запитаєте знову."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再次向 macOS 请求 %@ 保存的登录信息。选择“拒绝”后，在你再次请求之前 Codenotch 不会读取它。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

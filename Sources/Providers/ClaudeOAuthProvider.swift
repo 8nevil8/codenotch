@@ -148,6 +148,20 @@ actor ClaudeOAuthProvider: UsageProvider {
     }
 
     func fetchSnapshot() async throws -> ProviderSnapshot {
+        // A Deny is honoured by every source, not only the keychain (#98).
+        // Claude Desktop's cache and the CLI never needed this app's keychain
+        // access, which is exactly why they used to keep the ring filled after
+        // someone said no to it.
+        if keychain.isRefused {
+            throw UsageProviderError.accessDenied
+        }
+        // "Allow access…" was clicked: go straight to the keychain, so the
+        // dialogue the person asked for is the thing that answers — a cached
+        // or CLI reading would satisfy the refresh and the question would
+        // never be put.
+        if keychain.isAskingAgain {
+            return try await fetchFromKeychain()
+        }
         // Ahead of both the CLI and the back-off check. This is the cheapest
         // source and the only one that can never interrupt anyone: it reads a
         // file Claude Desktop has already written.
@@ -161,6 +175,10 @@ actor ClaudeOAuthProvider: UsageProvider {
         if let windows = await cliWindows() {
             return snapshot(windows: windows, plan: lastCLIPlan)
         }
+        return try await fetchFromKeychain()
+    }
+
+    private func fetchFromKeychain() async throws -> ProviderSnapshot {
         if Self.shouldHoldOff(until: retryNoEarlierThan, slack: backoffSlack),
            let retryNoEarlierThan {
             let remaining = retryNoEarlierThan.timeIntervalSinceNow

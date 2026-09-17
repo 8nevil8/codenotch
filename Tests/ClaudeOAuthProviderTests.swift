@@ -642,6 +642,7 @@ final class ClaudeKeychainPromptTests: XCTestCase {
 
     /// A Deny must not leave the permission lying around for the next poll to
     /// spend: the dialogue would then appear on a timer, which is the bug.
+    /// Since #98 the next poll does not read at all.
     func testADeniedPromptDoesNotLeaveTheNextPollAllowedToPrompt() {
         let reads = Reads(), k = keychain(reads)
         reads.fails = true
@@ -649,7 +650,67 @@ final class ClaudeKeychainPromptTests: XCTestCase {
         XCTAssertThrowsError(try k.load())
         k.forgetCached()
         XCTAssertThrowsError(try k.load())
-        XCTAssertEqual(reads.interactive, [true, false])
+        XCTAssertEqual(reads.interactive, [true])
+    }
+
+    /// #98: Deny is an answer, not an obstacle. Background reads used to get
+    /// the secret anyway through the security tool; now nothing reads it —
+    /// not after the cache is dropped, not after the item changes — until the
+    /// person asks again.
+    func testADenyStopsEveryBackgroundReadUntilAskedAgain() throws {
+        let reads = Reads(), k = keychain(reads)
+        reads.fails = true
+        k.askAgain()
+        XCTAssertThrowsError(try k.load())
+        XCTAssertTrue(k.isRefused)
+
+        reads.fails = false
+        for _ in 0..<3 {
+            k.forgetCached()
+            XCTAssertThrowsError(try k.load()) { error in
+                guard case UsageProviderError.accessDenied = error else { return XCTFail("\(error)") }
+            }
+        }
+        XCTAssertEqual(reads.interactive, [true], "a refused login must not be read in the background")
+
+        k.askAgain()
+        XCTAssertFalse(k.isRefused, "asking again lifts it for that one read")
+        _ = try k.load()
+        XCTAssertFalse(k.isRefused, "answering Allow clears the refusal")
+        k.forgetCached()
+        _ = try k.load()
+        XCTAssertEqual(reads.interactive, [true, true, false])
+    }
+
+    /// Only the dialogue's own answer counts. A background read macOS refused
+    /// without asking anyone is not a person saying no.
+    func testARefusalWithoutADialogueIsNotRecorded() {
+        let reads = Reads(), k = keychain(reads)
+        reads.fails = true
+        XCTAssertThrowsError(try k.load())
+        XCTAssertFalse(k.isRefused)
+    }
+
+    /// Kept in preferences, so relaunching does not quietly undo a Deny.
+    func testARefusalSurvivesARelaunch() {
+        let suite = "ClaudeKeychainRefusal.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let service = "codenotch-test-\(UUID().uuidString)"
+        let first = ClaudeKeychain(services: [service], refusals: defaults) { _, _ in
+            throw UsageProviderError.accessDenied
+        }
+        first.askAgain()
+        XCTAssertThrowsError(try first.load())
+
+        var readAgain = false
+        let relaunched = ClaudeKeychain(services: [service], refusals: defaults) { _, _ in
+            readAgain = true
+            return ClaudeCredentials(accessToken: "t", expiresAt: .distantFuture, subscriptionType: nil)
+        }
+        XCTAssertTrue(relaunched.isRefused)
+        XCTAssertThrowsError(try relaunched.load())
+        XCTAssertFalse(readAgain)
     }
 }
 
