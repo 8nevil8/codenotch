@@ -22843,6 +22843,53 @@
           }
         }
       }
+    },
+    "Z.ai does not publish usage for the GLM Start Plan yet, so there is nothing to read. The Coding Plan is supported.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Z.ai veröffentlicht für den GLM Start Plan noch keine Nutzung, daher gibt es nichts zu lesen. Der Coding Plan wird unterstützt."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Z.ai ne publie pas encore la consommation du GLM Start Plan, il n'y a donc rien à lire. Le Coding Plan est pris en charge."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Z.ai は GLM Start Plan の使用量をまだ公開していないため、読み取れる情報がありません。Coding Plan には対応しています。"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A Z.ai ainda não publica o uso do GLM Start Plan, então não há nada para ler. O Coding Plan é compatível."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Z.ai пока не публикует использование для GLM Start Plan, поэтому читать нечего. Coding Plan поддерживается."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Z.ai поки не публікує використання для GLM Start Plan, тож читати нічого. Coding Plan підтримується."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Z.ai 尚未公开 GLM Start Plan 的用量，因此没有可读取的数据。Coding Plan 已支持。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
