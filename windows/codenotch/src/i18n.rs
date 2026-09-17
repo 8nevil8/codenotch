@@ -158,12 +158,16 @@ pub fn tr(lang: &str, key: &str) -> &'static str {
         ("ru", "settings") => "Настройки…",
         ("uk", "settings") => "Налаштування…",
         (_, "settings") => "Settings…",
-
-
-
-
-
-
+        ("zh", "refresh_now") => "立即刷新",
+        ("ja", "refresh_now") => "今すぐ更新",
+        ("ru", "refresh_now") => "Обновить сейчас",
+        ("uk", "refresh_now") => "Оновити зараз",
+        (_, "refresh_now") => "Refresh now",
+        ("zh", "open_host") => "打开 %@",
+        ("ja", "open_host") => "%@ を開く",
+        ("ru", "open_host") => "Открыть %@",
+        ("uk", "open_host") => "Відкрити %@",
+        (_, "open_host") => "Open %@",
         _ => "?",
     }
 }
@@ -177,6 +181,8 @@ mod tests {
         ("refresh_all", "Обновить всё"),
         ("waiting", "Ожидание первых данных…"),
         ("quit_app", "Выйти из Codenotch"),
+        ("refresh_now", "Обновить сейчас"),
+        ("open_host", "Открыть %@"),
         ("quit", "Выйти"),
         ("install", "Установить хуки Claude Code"),
         ("uninstall", "Удалить хуки"),
@@ -214,6 +220,8 @@ mod tests {
         ("waiting", "Очікування першого показника…"),
         ("quit_app", "Вийти з Codenotch"),
         ("settings", "Налаштування…"),
+        ("refresh_now", "Оновити зараз"),
+        ("open_host", "Відкрити %@"),
     ];
 
     #[test]

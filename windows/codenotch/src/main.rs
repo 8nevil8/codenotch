@@ -6,6 +6,7 @@ mod doctor;
 mod focus;
 mod hooks_install;
 mod i18n;
+mod notchmenu;
 mod server;
 mod state;
 mod tray;
@@ -380,18 +381,37 @@ fn get_usage(state: tauri::State<AppState>) -> usage::UsageSnapshot {
     state.usage.lock().unwrap().clone()
 }
 
-#[tauri::command]
-fn refresh_usage(app: AppHandle) {
-    {
-        let st = app.state::<AppState>();
-        let mut u = st.usage.lock().unwrap();
-        u.backoff_until = 0;
+/// Asks one provider to read again, and says whether a reading is on its way. Claude's rate-limit
+/// wait stands, as on the Mac: asking early spends a request and can double the wait.
+pub(crate) fn refresh_provider(app: &AppHandle, provider: &str) -> bool {
+    match provider {
+        "claude" => {
+            if app.state::<AppState>().usage.lock().unwrap().backoff_until > now_ms() {
+                return false;
+            }
+            usage::request_refresh();
+        }
+        "codex" => codex::request_refresh(),
+        "cursor" => cursor::request_refresh(),
+        "grok" => grok::request_refresh(),
+        "gemini" => antigravity::request_refresh(),
+        _ => return false,
     }
-    usage::request_refresh();
-    codex::request_refresh();
-    cursor::request_refresh();
-    grok::request_refresh();
-    antigravity::request_refresh();
+    true
+}
+
+pub(crate) fn refresh_all(app: &AppHandle) {
+    for provider in TRAY_PROVIDER_IDS {
+        refresh_provider(app, provider);
+    }
+    let a = app.clone();
+    std::thread::spawn(move || reload_glyphs(&a));
+}
+
+/// A click on a ring refetches that provider, as on the Mac.
+#[tauri::command]
+fn refresh_ring(app: AppHandle, provider: String) -> bool {
+    refresh_provider(&app, &provider)
 }
 
 #[tauri::command]
@@ -446,16 +466,20 @@ fn get_codex(state: tauri::State<AppState>) -> usage::UsageSnapshot {
     state.codex.lock().unwrap().clone()
 }
 
-/// A click on a cell opens that provider's usage page
-#[tauri::command]
-fn open_provider_page(provider: String) {
-    let url = match provider.as_str() {
-        "codex" => "https://chatgpt.com/#settings/Account",
-        "cursor" => "https://cursor.com/dashboard",
-        "grok" => "https://grok.com/?_s=usage",
-        "gemini" => "https://antigravity.google",
-        _ => "https://claude.ai/settings/usage",
-    };
+/// A provider's usage page, and the host the notch menu names it by.
+pub(crate) fn provider_page(provider: &str) -> Option<(&'static str, &'static str)> {
+    Some(match provider {
+        "claude" => ("https://claude.ai/settings/usage", "claude.ai"),
+        "codex" => ("https://chatgpt.com/#settings/Account", "chatgpt.com"),
+        "cursor" => ("https://cursor.com/dashboard", "cursor.com"),
+        "grok" => ("https://grok.com/?_s=usage", "grok.com"),
+        "gemini" => ("https://antigravity.google", "antigravity.google"),
+        _ => return None,
+    })
+}
+
+pub(crate) fn open_provider_page(provider: &str) {
+    let Some((url, _)) = provider_page(provider) else { return };
     let mut cmd = std::process::Command::new("cmd");
     cmd.args(["/C", "start", "", url]);
     #[cfg(windows)]
@@ -676,18 +700,6 @@ fn start_pointer_watchdog(app: AppHandle) {
 #[tauri::command]
 fn log_js(msg: String) {
     applog(&format!("js: {}", msg.chars().take(600).collect::<String>()));
-}
-
-#[tauri::command]
-fn open_usage_page() {
-    let mut cmd = std::process::Command::new("cmd");
-    cmd.args(["/C", "start", "", "https://claude.ai/settings/usage"]);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    }
-    let _ = cmd.spawn();
 }
 
 #[tauri::command]
@@ -1319,9 +1331,8 @@ fn main() {
             get_activity,
             open_data_dir,
             drag_begin,
-            open_provider_page,
-            refresh_usage,
-            open_usage_page,
+            refresh_ring,
+            notchmenu::show_notch_menu,
             set_hot,
             report_dpr,
             log_js,
@@ -1363,6 +1374,7 @@ fn main() {
                 let _ = w.show();
             }
             tray::setup(&handle)?;
+            notchmenu::setup(&handle);
             start_menu_updater(handle.clone());
             // Honours the saved switches: a notch hidden last time stays hidden.
             apply_visibility(&handle);
@@ -1416,8 +1428,24 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{cursor_in_hot, notch_window_size, ring_window, HOT_PAD, NOTCH_H, NOTCH_W};
+    use super::{
+        cursor_in_hot, notch_window_size, provider_page, ring_window, HOT_PAD, NOTCH_H, NOTCH_W,
+        TRAY_PROVIDER_IDS,
+    };
     use crate::usage::LimitWindow;
+
+    /// A provider added without a page of its own used to fall through to Claude's
+    #[test]
+    fn every_provider_opens_its_own_page() {
+        let mut hosts: Vec<&str> = TRAY_PROVIDER_IDS
+            .iter()
+            .map(|id| provider_page(id).unwrap_or_else(|| panic!("{id} has no usage page")).1)
+            .collect();
+        hosts.sort();
+        hosts.dedup();
+        assert_eq!(hosts.len(), TRAY_PROVIDER_IDS.len());
+        assert_eq!(provider_page("nobody"), None);
+    }
 
     #[test]
     fn a_flat_notch_is_wide_enough_for_five_rings() {

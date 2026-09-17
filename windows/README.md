@@ -67,6 +67,10 @@ notch shows, its size, the weekly ring, which screen edge it sits on and which s
 start with Windows, the language, Claude Code hooks, reset
 position, and the data folder (`%APPDATA%\codenotch` — logs, persisted readings, icon overrides).
 
+Notch: clicking a ring re-reads that provider, as on the Mac. Right-clicking the notch or its card
+offers **Refresh now**, the provider's usage page (**Open claude.ai**, **Open chatgpt.com**, …) and
+**Quit Codenotch**. Neither click, nor the tray, asks Claude again while its rate-limit wait runs.
+
 ### Where the notch sits
 
 The notch pins to one edge of one screen. **Appearance → Edge** picks left, right, top or bottom:
