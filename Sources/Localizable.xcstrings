@@ -1355,6 +1355,12 @@
             "state": "translated",
             "value": "Opus"
           }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opus"
+          }
         }
       }
     },
@@ -1392,6 +1398,12 @@
           }
         },
         "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sonnet"
+          }
+        },
+        "uk": {
           "stringUnit": {
             "state": "translated",
             "value": "Sonnet"
@@ -2330,6 +2342,12 @@
             "state": "translated",
             "value": "Labs"
           }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Labs"
+          }
         }
       }
     },
@@ -2602,6 +2620,12 @@
           }
         },
         "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grok Build"
+          }
+        },
+        "uk": {
           "stringUnit": {
             "state": "translated",
             "value": "Grok Build"
@@ -2972,6 +2996,12 @@
           }
         },
         "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VS Code"
+          }
+        },
+        "uk": {
           "stringUnit": {
             "state": "translated",
             "value": "VS Code"
@@ -3436,6 +3466,12 @@
           }
         },
         "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dock"
+          }
+        },
+        "uk": {
           "stringUnit": {
             "state": "translated",
             "value": "Dock"
@@ -10108,6 +10144,12 @@
             "state": "translated",
             "value": "Codenotch"
           }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codenotch"
+          }
         }
       }
     },
@@ -16353,6 +16395,12 @@
             "state": "translated",
             "value": "Localhost"
           }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Localhost"
+          }
         }
       }
     },
@@ -16744,6 +16792,12 @@
             "state": "translated",
             "value": "Liquid Glass"
           }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liquid Glass"
+          }
         }
       }
     },
@@ -17084,6 +17138,12 @@
           }
         },
         "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Français"
+          }
+        },
+        "uk": {
           "stringUnit": {
             "state": "translated",
             "value": "Français"
@@ -22186,6 +22246,12 @@
             "state": "translated",
             "value": "Spark"
           }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spark"
+          }
         }
       }
     },
@@ -22571,6 +22637,12 @@
             "state": "translated",
             "value": "Cookie: …"
           }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cookie: …"
+          }
         }
       }
     },
@@ -22780,22 +22852,58 @@
     },
     "Usage Limits": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пороги використання"
+          }
+        }
+      }
     },
     "Watch limit": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поріг уваги"
+          }
+        }
+      }
     },
     "Critical limit": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Критичний поріг"
+          }
+        }
+      }
     },
     "Reset to defaults": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Відновити типові значення"
+          }
+        }
+      }
     },
     "Dashed weekly ring": {
-      "extractionState": "manual"
+      "extractionState": "manual",
+      "localizations": {
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пунктирне тижневе кільце"
+          }
+        }
+      }
     },
     "Asks macOS for %@'s saved login again. Deny stops Codenotch reading it until you ask again.": {
       "extractionState": "manual",
