@@ -967,10 +967,11 @@ document.getElementById('btn-recentre').addEventListener('click', () => {
   invoke('reset_notch_position')
     .then(() => {
       toast(ui('The notch is back in the middle', 'The notch is back in the middle'));
-      // Recentre also puts the edge and the screen back, so the controls above have to follow
-      notchEdge = 'right';
-      renderEdge();
-      return refreshScreens();
+      // Asked for rather than assumed: Recentre keeps the notch on its own edge, and only sends a
+      // notch whose screen is gone back to the primary one — which the page cannot know either way
+      return call('get_notch_edge', undefined, null)
+        .then(v => { if(typeof v === 'string') notchEdge = v; renderEdge(); })
+        .then(refreshScreens);
     })
     .catch(e => strip('reset_notch_position failed: ' + errText(e)));
 });
