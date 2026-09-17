@@ -144,6 +144,19 @@ final class ClaudeOAuthProviderTests: XCTestCase {
                                    desktopRescanInterval: desktopRescanInterval)
     }
 
+    /// #178: a signed-in account whose answer names no limit gets a message,
+    /// not an empty reading that waits for the first reading forever.
+    func testAnAnswerWithNoLimitsSaysSoRatherThanWaiting() async throws {
+        StubEndpoint.reset([.init(status: 200, body: Data(#"{"extra_usage":null}"#.utf8))])
+        let provider = makeProvider(source: CredentialSource(readable: true))
+        do {
+            _ = try await provider.fetchSnapshot()
+            XCTFail("an answer with no limit windows must not be a reading")
+        } catch UsageProviderError.nothingMetered(let why) {
+            XCTAssertTrue(why.contains("no usage limits"), why)
+        }
+    }
+
     // MARK: - The CLI path
 
     /// The point of the whole thing: when `claude "/usage"` answers, nothing

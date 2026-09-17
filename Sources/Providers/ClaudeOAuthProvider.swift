@@ -383,7 +383,17 @@ actor ClaudeOAuthProvider: UsageProvider {
         }
 
         let payload = try UsageResponse.decoder.decode(UsageResponse.self, from: data)
-        return snapshot(windows: payload.limitWindows(), plan: credentials?.subscriptionType)
+        let windows = payload.limitWindows()
+        // Answered, and signed in, but no limit in it: some Enterprise and team
+        // accounts come back this way (#178). An empty reading drew nothing and
+        // left "Waiting for the first reading…" up for good; say what happened.
+        guard !windows.isEmpty else {
+            Log.usage.notice("claude usage endpoint answered with no limit windows")
+            throw UsageProviderError.nothingMetered(
+                L10n.t("Claude answered, but listed no usage limits for this account. Some Enterprise and team plans don't report them.")
+            )
+        }
+        return snapshot(windows: windows, plan: credentials?.subscriptionType)
     }
 
     private func currentToken() throws -> String {

@@ -22890,6 +22890,53 @@
           }
         }
       }
+    },
+    "Claude answered, but listed no usage limits for this account. Some Enterprise and team plans don't report them.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude hat geantwortet, aber für dieses Konto keine Nutzungslimits genannt. Manche Enterprise- und Team-Tarife melden sie nicht."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude a répondu, mais n'a indiqué aucune limite d'utilisation pour ce compte. Certaines offres Enterprise et Team ne les communiquent pas."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude から応答はありましたが、このアカウントの使用量上限は示されませんでした。Enterprise や Team の一部のプランでは報告されません。"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Claude respondeu, mas não informou limites de uso para esta conta. Alguns planos Enterprise e Team não os informam."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude ответил, но не указал лимиты использования для этой учётной записи. Некоторые тарифы Enterprise и Team их не сообщают."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude відповів, але не вказав лімітів використання для цього облікового запису. Деякі тарифи Enterprise і Team їх не повідомляють."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude 已响应，但没有列出此账户的用量限额。部分 Enterprise 和团队套餐不会提供这些数据。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
