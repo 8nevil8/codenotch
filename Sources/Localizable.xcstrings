@@ -13290,7 +13290,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "已用其 %@ 额度的 %lld%%。"
+            "value": "已用其 %2$@ 额度的 %1$lld%%。"
           }
         },
         "de": {
@@ -13589,49 +13589,49 @@
         }
       }
     },
-    "Alert when %@ crosses 80% and 100% of a limit.": {
+    "Alert when %@ crosses 80%% and 100%% of a limit.": {
       "extractionState": "manual",
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Alerter quand %@ franchit 80 % et 100 % d'une limite."
+            "value": "Alerter quand %@ franchit 80 %% et 100 %% d'une limite."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ が上限の 80% と 100% を超えたときに通知します。"
+            "value": "%@ が上限の 80%% と 100%% を超えたときに通知します。"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Alertar quando %@ ultrapassar 80% e 100% de um limite."
+            "value": "Alertar quando %@ ultrapassar 80%% e 100%% de um limite."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "当 %@ 的额度越过 80% 和 100% 时提醒。"
+            "value": "当 %@ 的额度越过 80%% 和 100%% 时提醒。"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Оповещать, когда %@ достигает 80% и 100% лимита."
+            "value": "Оповещать, когда %@ достигает 80%% и 100%% лимита."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Benachrichtigen, wenn %@ 80 % und 100 % eines Limits überschreitet."
+            "value": "Benachrichtigen, wenn %@ 80 %% und 100 %% eines Limits überschreitet."
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Сповіщати, коли %@ перетинає 80% і 100% ліміту."
+            "value": "Сповіщати, коли %@ перетинає 80%% і 100%% ліміту."
           }
         }
       }
@@ -15657,96 +15657,96 @@
         }
       }
     },
-    "%@% deficit": {
+    "%@%% deficit": {
       "extractionState": "manual",
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ % de déficit"
+            "value": "%@ %% de déficit"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@% 超過"
+            "value": "%@%% 超過"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@% de déficit"
+            "value": "%@%% de déficit"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@% 透支"
+            "value": "%@%% 透支"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "дефицит %@%"
+            "value": "дефицит %@%%"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ % Defizit"
+            "value": "%@ %% Defizit"
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@% дефіциту"
+            "value": "%@%% дефіциту"
           }
         }
       }
     },
-    "%@% reserved": {
+    "%@%% reserved": {
       "extractionState": "manual",
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ % en réserve"
+            "value": "%@ %% en réserve"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@% 余裕"
+            "value": "%@%% 余裕"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@% em reserva"
+            "value": "%@%% em reserva"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@% 预留"
+            "value": "%@%% 预留"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "резерв %@%"
+            "value": "резерв %@%%"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ % Reserve"
+            "value": "%@ %% Reserve"
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@% запасу"
+            "value": "%@%% запасу"
           }
         }
       }
