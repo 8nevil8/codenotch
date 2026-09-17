@@ -20,6 +20,7 @@ mod glyphs;
 mod trayicon;
 mod activity;
 mod diag;
+mod dropzones;
 mod watcher;
 mod settings_window;
 
@@ -268,6 +269,86 @@ fn left_button_down() -> bool {
 #[cfg(not(windows))]
 fn left_button_down() -> bool {
     false
+}
+
+/// Which edge a point belongs to: the screen split into four triangles about its centre, as on the
+/// Mac. Nearest-edge rather than hit testing the zones, which are thin — landing inside a 70 px strip
+/// would be threading a needle.
+pub(crate) fn edge_at(x: f64, y: f64, w: f64, h: f64) -> &'static str {
+    let (left, right, top, bottom) = (x, w - x, y, h - y);
+    let nearest = left.min(right).min(top).min(bottom);
+    if nearest == right {
+        "right"
+    } else if nearest == left {
+        "left"
+    } else if nearest == top {
+        "top"
+    } else {
+        "bottom"
+    }
+}
+
+/// Carrying the notch by its move handle: the zones go up, the pointer picks one, and releasing
+/// hands it over. The notch itself stays where it is until then — what is being chosen is a place on
+/// the screen, not a distance moved, so nothing follows the pointer.
+///
+/// `depth` and `length` are the pill's own measurements in the notch page's CSS px; they are the
+/// size the zones draw, so a zone is the notch rather than a guess at it.
+#[tauri::command]
+fn begin_move(app: AppHandle, depth: f64, length: f64) {
+    if DRAGGING.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    std::thread::spawn(move || {
+        let done = |app: &AppHandle| {
+            dropzones::hide(app);
+            DRAGGING.store(false, std::sync::atomic::Ordering::SeqCst);
+            let _ = app.emit("move_end", ());
+        };
+        let Some(mon) = target_screen(&app) else {
+            done(&app);
+            return;
+        };
+        let from = {
+            let st = app.state::<AppState>();
+            let c = st.cfg.lock().unwrap();
+            config::edge_or_right(&c.notch_edge)
+        };
+        // The overlay is at the monitor's own scale; the notch page is that scale times its size
+        let size = ui_scale(&app);
+        let mut zones = dropzones::Zones {
+            w: mon.w as f64 / mon.scale,
+            h: mon.h as f64 / mon.scale,
+            depth: depth * size,
+            length: length * size,
+            target: from.clone(),
+        };
+        dropzones::show(&app, &mon, &zones);
+        let mut target = from.clone();
+        while left_button_down() {
+            if let Ok(cur) = app.cursor_position() {
+                let next = edge_at(cur.x - mon.x as f64, cur.y - mon.y as f64, mon.w as f64, mon.h as f64);
+                if next != target {
+                    target = next.to_string();
+                    zones.target = target.clone();
+                    dropzones::retarget(&app, &zones);
+                    let _ = app.emit("move_target", &target);
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(16));
+        }
+        applog(&format!("notch carry: {from} -> {target}"));
+        if target != from {
+            {
+                let st = app.state::<AppState>();
+                let mut c = st.cfg.lock().unwrap();
+                c.notch_edge = target.clone();
+                config::save(&c);
+            }
+            place_notch(&app);
+        }
+        done(&app);
+    });
 }
 
 #[tauri::command]
@@ -1100,6 +1181,25 @@ fn set_notch_edge(app: AppHandle, edge: String) -> String {
     value
 }
 
+#[tauri::command]
+fn get_move_handle(app: AppHandle) -> bool {
+    let st = app.state::<AppState>();
+    let c = st.cfg.lock().unwrap();
+    c.show_move_handle
+}
+
+#[tauri::command]
+fn set_move_handle(app: AppHandle, on: bool) -> bool {
+    {
+        let st = app.state::<AppState>();
+        let mut c = st.cfg.lock().unwrap();
+        c.show_move_handle = on;
+        config::save(&c);
+    }
+    let _ = app.emit("move_handle", on);
+    on
+}
+
 /// One attached monitor, as Settings lists it.
 #[derive(serde::Serialize)]
 pub struct MonitorInfo {
@@ -1327,6 +1427,10 @@ fn main() {
             get_activity,
             open_data_dir,
             drag_begin,
+            begin_move,
+            get_move_handle,
+            set_move_handle,
+            dropzones::get_zones,
             open_provider_page,
             refresh_usage,
             open_usage_page,
@@ -1439,6 +1543,21 @@ mod tests {
         for edge in ["left", "right"] {
             assert_eq!(notch_window_size(edge), (NOTCH_W, super::NOTCH_UPRIGHT_H));
         }
+    }
+
+    /// Four triangles about the centre, so every point on the screen belongs to exactly one edge.
+    #[test]
+    fn a_carried_notch_lands_on_the_nearest_edge() {
+        let (w, h) = (2560.0, 1440.0);
+        assert_eq!(super::edge_at(2500.0, 700.0, w, h), "right");
+        assert_eq!(super::edge_at(20.0, 700.0, w, h), "left");
+        assert_eq!(super::edge_at(1280.0, 30.0, w, h), "top");
+        assert_eq!(super::edge_at(1280.0, 1400.0, w, h), "bottom");
+        // The corner diagonals are the boundaries: a step either side of one changes the answer
+        assert_eq!(super::edge_at(690.0, 700.0, w, h), "left");
+        assert_eq!(super::edge_at(700.0, 690.0, w, h), "top");
+        // Dragged onto another monitor: still answers the edge it left by
+        assert_eq!(super::edge_at(-200.0, 700.0, w, h), "left");
     }
 
     /// The pill sits in the middle of the window, so half of it, a fillet and the settings orb's reach

@@ -146,38 +146,56 @@
   body[data-edge="top"] #tail{clip-path:path('M0 32C9 32 13.68 13.44 18 0C22.32 13.44 27 32 36 32Z')}
   body[data-edge="bottom"] #tail{clip-path:path('M0 0C9 0 13.68 18.56 18 32C22.32 18.56 27 0 36 0Z')}
 
-  /* The settings orb, past the far end of the pill as on the Mac (SettingsOrb). At rest it is a quarter
-     arc tucked into the far fillet's pocket, concentric with it and a gap inside; under the pointer the
-     same circle fills in and takes a gear. The Mac's measures, unscaled: arc radius 28.5, stroke 6.8,
-     disc 46.6, gear 21. `placeOrb` puts the box's centre on the fillet's centre. */
-  #orb{position:absolute;width:57px;height:57px;display:none;--arc:270deg}
-  #orb.placed{display:block}
-  #orb.hover{cursor:pointer}
-  #orb > *{position:absolute;left:50%;top:50%;pointer-events:none;transition:opacity .2s,transform .36s cubic-bezier(.34,1.3,.64,1)}
-  .orb-rest{width:72px;height:72px;margin:-36px 0 0 -36px;overflow:visible;transform:rotate(var(--arc)) scale(1)}
-  .orb-disc{width:46.6px;height:46.6px;margin:-23.3px 0 0 -23.3px;border-radius:50%;background:#000;border:1px solid #2e2e2e;opacity:0;transform:scale(1.1)}
-  .orb-gear{width:21px;height:21px;margin:-10.5px 0 0 -10.5px;fill:#e8e8ea;opacity:0;
+  /* The two handles, one off each end of the pill, as on the Mac (SettingsOrb and MoveHandle):
+     settings past the far fillet, move past the near one. At rest each is a quarter arc tucked into
+     that fillet's pocket, concentric with it and a gap inside; under the pointer the same circle
+     fills in and takes its glyph. The Mac's measures, unscaled: arc radius 28.5, stroke 6.8, disc
+     46.6, glyph 21. `placeHandles` puts each box's centre on its fillet's centre. */
+  .handle{position:absolute;width:57px;height:57px;display:none;--arc:270deg}
+  .handle.placed{display:block}
+  .handle.hover{cursor:pointer}
+  .handle > *{position:absolute;left:50%;top:50%;pointer-events:none;transition:opacity .2s,transform .36s cubic-bezier(.34,1.3,.64,1)}
+  .h-rest{width:72px;height:72px;margin:-36px 0 0 -36px;overflow:visible;transform:rotate(var(--arc)) scale(1)}
+  .h-disc{width:46.6px;height:46.6px;margin:-23.3px 0 0 -23.3px;border-radius:50%;background:#000;border:1px solid #2e2e2e;opacity:0;transform:scale(1.1)}
+  .h-glyph{width:21px;height:21px;margin:-10.5px 0 0 -10.5px;fill:#e8e8ea;opacity:0;
     transform:rotate(calc(var(--spins,0) * 360deg - 60deg)) scale(.5);transition:opacity .2s,transform .55s cubic-bezier(.34,1.2,.64,1)}
-  #orb.hover .orb-rest{opacity:0;transform:rotate(var(--arc)) scale(.86)}
-  #orb.hover .orb-disc{opacity:1;transform:scale(1)}
-  #orb.hover .orb-gear{opacity:1;transform:rotate(calc(var(--spins,0) * 360deg)) scale(1)}
-  /* The quarter that faces the fillet: up and outward on the right, turned for the other edges */
+  .handle.hover .h-rest{opacity:0;transform:rotate(var(--arc)) scale(.86)}
+  .handle.hover .h-disc{opacity:1;transform:scale(1)}
+  .handle.hover .h-glyph{opacity:1;transform:rotate(calc(var(--spins,0) * 360deg)) scale(1)}
+  /* Carrying: the disc goes dashed and the hand stops turning — it is being held now, not offered */
+  #move.armed .h-disc{border:2px dashed #e8e8ea;background:rgba(0,0,0,.72)}
+  /* The quarter that faces the fillet: up and outward past the far end on the right, and the same two
+     directions mirrored along the stack at the near end */
   body[data-edge="left"] #orb,body[data-edge="top"] #orb{--arc:180deg}
   body[data-edge="bottom"] #orb{--arc:90deg}
-  @media (prefers-reduced-motion: reduce){#orb > *{transition:none}}
+  #move{--arc:0deg}
+  body[data-edge="left"] #move{--arc:90deg}
+  body[data-edge="top"] #move{--arc:270deg}
+  @media (prefers-reduced-motion: reduce){.handle > *{transition:none}}
 </style>
 </head>
 <body>
 <div id="root">
   <div id="card"></div>
   <div id="tail"></div>
-  <div id="orb">
-    <svg class="orb-rest" viewBox="-36 -36 72 72" aria-hidden="true">
+  <div id="move" class="handle">
+    <svg class="h-rest" viewBox="-36 -36 72 72" aria-hidden="true">
       <circle r="28.5" fill="none" stroke="#2e2e2e" stroke-width="8.8" stroke-linecap="round" stroke-dasharray="44.77 179.07"/>
       <circle r="28.5" fill="none" stroke="#000" stroke-width="6.8" stroke-linecap="round" stroke-dasharray="44.77 179.07"/>
     </svg>
-    <div class="orb-disc"></div>
-    <svg class="orb-gear" viewBox="0 0 12 12" aria-hidden="true"><path fill-rule="evenodd" d="M5.1.6h1.8l.3 1.5 1.1.5 1.3-.8 1.3 1.3-.8 1.3.5 1.1 1.5.3v1.8l-1.5.3-.5 1.1.8 1.3-1.3 1.3-1.3-.8-1.1.5-.3 1.5H5.1l-.3-1.5-1.1-.5-1.3.8-1.3-1.3.8-1.3-.5-1.1L.6 6.9V5.1l1.5-.3.5-1.1-.8-1.3 1.3-1.3 1.3.8 1.1-.5zM6 4.1a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8z"/></svg>
+    <div class="h-disc"></div>
+    <!-- A hand, as on the Mac: the gesture is a carry, not a nudge, which is what arrows would say -->
+    <svg class="h-glyph" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8 13V5.6a1.5 1.5 0 0 1 3 0V11h.6V3.5a1.5 1.5 0 0 1 3 0V11h.6V5a1.5 1.5 0 0 1 3 0v8.4c0 4.2-2 7.1-5.6 7.1-2.4 0-3.8-1-5.1-2.7l-3.8-5a1.5 1.5 0 0 1 2.2-2z"/>
+    </svg>
+  </div>
+  <div id="orb" class="handle">
+    <svg class="h-rest" viewBox="-36 -36 72 72" aria-hidden="true">
+      <circle r="28.5" fill="none" stroke="#2e2e2e" stroke-width="8.8" stroke-linecap="round" stroke-dasharray="44.77 179.07"/>
+      <circle r="28.5" fill="none" stroke="#000" stroke-width="6.8" stroke-linecap="round" stroke-dasharray="44.77 179.07"/>
+    </svg>
+    <div class="h-disc"></div>
+    <svg class="h-glyph" viewBox="0 0 12 12" aria-hidden="true"><path fill-rule="evenodd" d="M5.1.6h1.8l.3 1.5 1.1.5 1.3-.8 1.3 1.3-.8 1.3.5 1.1 1.5.3v1.8l-1.5.3-.5 1.1.8 1.3-1.3 1.3-1.3-.8-1.1.5-.3 1.5H5.1l-.3-1.5-1.1-.5-1.3.8-1.3-1.3.8-1.3-.5-1.1L.6 6.9V5.1l1.5-.3.5-1.1-.8-1.3 1.3-1.3 1.3.8 1.1-.5zM6 4.1a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8z"/></svg>
   </div>
   <div id="pill"></div><!-- one .cell per provider, stacked vertically (upstream: data-driven, the same layout for 1–5 cells) -->
   <div id="notice"></div>
@@ -713,7 +731,7 @@ function rectOf(el){const r=el.getBoundingClientRect(),k=window.devicePixelRatio
 function reportHot(){
   const open=card.classList.contains('show');
   const rects=open?[rectOf(pill),rectOf(tail),rectOf(card)]:[rectOf(pill)];
-  if(placeOrb()) rects.push(rectOf(orb));
+  if(placeHandles()){ rects.push(rectOf(orb)); if(showMove) rects.push(rectOf(moveHandle)); }
   callq('set_hot',{rects,expanded:open}).catch(()=>{});
 }
 function armWatchdog(){
@@ -755,8 +773,9 @@ function pointerInHot(x,y){
 let hideLogged=0;
 document.addEventListener('mousemove',e=>{
   if(dragging)return; // no card while dragging
-  setOrbHover(onOrb(e.clientX,e.clientY));
-  if(orbHover){ if(card.classList.contains('show')){ clearTimeout(hideTimer); hideCard(); } return; }
+  if(carrying) return; // the notch is in hand; the card would only be in the way
+  setHovered(onHandle(e.clientX,e.clientY));
+  if(hovered){ if(card.classList.contains('show')){ clearTimeout(hideTimer); hideCard(); } return; }
   const hot=pointerInHot(e.clientX,e.clientY);
   if(hot){
     clearTimeout(hideTimer);
@@ -797,38 +816,72 @@ function notice(msg){
   clearTimeout(n._h);n._h=setTimeout(()=>n.classList.remove('show'),6000);
 }
 
-/* ---- The settings orb -----------------------------------------------------
-   Placed whenever the hot rectangles are reported, since those follow every change to the pill.
-   Hover is a circle round the fillet's centre, as on the Mac, not the whole box; the card gives way
-   while the orb is under the pointer. A click opens Settings and turns the gear once. */
-const orb=document.getElementById('orb');
-const ORB_REACH=28.5; // the Mac's hot zone, half of 57
-let orbAt=null, orbHover=false, orbSpins=0;
-function placeOrb(){
+/* ---- The handles ----------------------------------------------------------
+   Settings past the far end of the pill, move past the near one. Placed whenever the hot rectangles
+   are reported, since those follow every change to the pill. Hover is a circle round each fillet's
+   centre, as on the Mac, not the whole box; the card gives way while either is under the pointer.
+   A click on the settings orb opens Settings; holding the move handle carries the notch. */
+const orb=document.getElementById('orb'), moveHandle=document.getElementById('move');
+const HANDLE_REACH=28.5; // the Mac's hot zone, half of 57
+let orbAt=null, moveAt=null, hovered=null, orbSpins=0, moveSpins=0, showMove=true, carrying=false;
+function put(el,x,y,z){
+  el.style.left=(x/z-HANDLE_REACH)+'px'; el.style.top=(y/z-HANDLE_REACH)+'px';
+  el.classList.add('placed');
+  return {x,y,reach:HANDLE_REACH*z};
+}
+function placeHandles(){
   const r=pill.getBoundingClientRect();
   if(!r.width) return false;
   // Measurements come back zoomed when fitZoom has zoomed the page; styles are written unzoomed
   const z=parseFloat(document.documentElement.style.zoom)||1;
-  const R=(parseFloat(getComputedStyle(pill).getPropertyValue('--fillet'))||26)*z;
-  // The far fillet's centre: the corner of its square diagonally opposite the one on the screen edge
-  const [x,y]=notchEdge==='left'?[r.left+R,r.bottom+R]:notchEdge==='top'?[r.right+R,r.top+R]
+  const R=(parseFloat(getComputedStyle(pill).getPropertyValue('--fillet'))||38.7)*z;
+  // Each fillet's centre: the corner of its square diagonally opposite the one on the screen edge
+  const far=notchEdge==='left'?[r.left+R,r.bottom+R]:notchEdge==='top'?[r.right+R,r.top+R]
     :notchEdge==='bottom'?[r.right+R,r.bottom-R]:[r.right-R,r.bottom+R];
-  orbAt={x,y,reach:ORB_REACH*z};
-  orb.style.left=(x/z-ORB_REACH)+'px'; orb.style.top=(y/z-ORB_REACH)+'px';
-  orb.classList.add('placed');
+  const near=notchEdge==='left'?[r.left+R,r.top-R]:notchEdge==='top'?[r.left-R,r.top+R]
+    :notchEdge==='bottom'?[r.left-R,r.bottom-R]:[r.right-R,r.top-R];
+  orbAt=put(orb,far[0],far[1],z);
+  // No point at all when it is switched off, since hover, the press and the hot area all read this
+  moveAt=showMove?put(moveHandle,near[0],near[1],z):null;
+  if(!showMove) moveHandle.classList.remove('placed','hover');
   return true;
 }
-function onOrb(x,y){ return !!orbAt&&Math.hypot(x-orbAt.x,y-orbAt.y)<=orbAt.reach; }
-function setOrbHover(on){ if(on!==orbHover){ orbHover=on; orb.classList.toggle('hover',on); } }
-document.addEventListener('mouseout',e=>{ if(!e.relatedTarget) setOrbHover(false); });
+function near(at,x,y){ return !!at&&Math.hypot(x-at.x,y-at.y)<=at.reach; }
+function onHandle(x,y){ return near(orbAt,x,y)?'orb':near(moveAt,x,y)?'move':null; }
+function setHovered(which){
+  if(which===hovered) return;
+  hovered=which;
+  orb.classList.toggle('hover',which==='orb');
+  moveHandle.classList.toggle('hover',which==='move'||carrying);
+}
+document.addEventListener('mouseout',e=>{ if(!e.relatedTarget&&!carrying) setHovered(null); });
 orb.addEventListener('click',e=>{
-  if(!onOrb(e.clientX,e.clientY)) return;
+  if(!near(orbAt,e.clientX,e.clientY)) return;
   orb.style.setProperty('--spins',++orbSpins);
-  // The Mac's press: down fast, back with a little bounce
-  if(!matchMedia('(prefers-reduced-motion: reduce)').matches)
-    orb.animate([{transform:'scale(1)',easing:'ease-out'},{transform:'scale(.84)',offset:.21,easing:'cubic-bezier(.34,1.56,.64,1)'},{transform:'scale(1)'}],{duration:430});
+  pressIn(orb);
   callq('open_settings').catch(()=>{});
 });
+// The Mac's press: down fast, back with a little bounce
+function pressIn(el){
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  el.animate([{transform:'scale(1)',easing:'ease-out'},{transform:'scale(.84)',offset:.21,easing:'cubic-bezier(.34,1.56,.64,1)'},{transform:'scale(1)'}],{duration:430});
+}
+/* Holding the move handle puts the notch in hand: Rust raises the drop zones and follows the pointer
+   until the button comes up. The notch itself does not move — what is being chosen is a place on the
+   screen, not a distance. The pill's own size goes with it, so a zone is the notch, not a guess. */
+moveHandle.addEventListener('mousedown',e=>{
+  if(e.button!==0||!near(moveAt,e.clientX,e.clientY)) return;
+  e.stopPropagation();
+  const r=pill.getBoundingClientRect(), flat=!edgeIsVertical();
+  carrying=true;
+  moveHandle.classList.add('armed','hover');
+  moveHandle.style.setProperty('--spins',++moveSpins);
+  clearTimeout(hideTimer); hideCard();
+  callq('begin_move',{depth:flat?r.height:r.width,length:flat?r.width:r.height}).catch(()=>{carrying=false;moveHandle.classList.remove('armed');});
+});
+listen('move_end',()=>{ carrying=false; moveHandle.classList.remove('armed'); setHovered(null); reportHot(); }).catch(()=>{});
+listen('move_handle',e=>{ showMove=e.payload!==false; reportHot(); }).catch(()=>{});
+invoke('get_move_handle').then(v=>{ showMove=v!==false; reportHot(); }).catch(()=>{});
 
 listen('usage',e=>{usage=e.payload||usage;renderRing();if(card.classList.contains('show'))renderCard();})
   .catch(e=>notice('listen(usage) failed: '+e));

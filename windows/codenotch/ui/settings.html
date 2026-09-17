@@ -154,6 +154,8 @@
           <div class="item cap" id="cap-weekly" data-dynamic></div>
           <div class="item"><span>Edge</span><span class="seg" id="seg-edge"><button data-v="left">Left</button><button data-v="right">Right</button><button data-v="top">Top</button><button data-v="bottom">Bottom</button></span></div>
           <div class="item cap" id="cap-edge" data-dynamic></div>
+          <div class="item"><span>Show move handle</span><button class="switch" id="sw-move" role="switch" aria-checked="false" aria-label="Show move handle"></button></div>
+          <div class="item cap">The arc above the notch. Hold it to carry the notch to another edge — Edge above does the same.</div>
           <div class="item" id="row-screen" hidden><span>Screen</span>
             <select id="screen" aria-label="Screen"></select>
           </div>
@@ -332,6 +334,8 @@ const ZH_STATIC = {
   'Model data':'模型数据'
 };
 const JA_STATIC = {
+  'Show move handle':'移動ハンドルを表示',
+  'The arc above the notch. Hold it to carry the notch to another edge — Edge above does the same.':'ノッチの上にある弧です。長押しすると、ノッチを別の辺へ運べます。上の「配置する辺」でも同じことができます。',
   'Settings sections':'設定セクション',
   'Accounts':'アカウント',
   'Appearance':'外観',
@@ -664,6 +668,8 @@ function drawSwitch(el, s){
 const hooks = remote('get_hooks_installed', 'set_hooks_installed', 'The Claude Code messages', () => renderAccounts());
 const autostart = remote('get_autostart', 'set_autostart', 'Open Codenotch at login', () => drawSwitch(document.getElementById('sw-autostart'), autostart));
 document.getElementById('sw-autostart').addEventListener('click', () => autostart.toggle());
+const moveHandle = remote('get_move_handle', 'set_move_handle', 'Show move handle', () => drawSwitch(document.getElementById('sw-move'), moveHandle));
+document.getElementById('sw-move').addEventListener('click', () => moveHandle.toggle());
 
 /* ---- Accounts: which providers get a ring --------------------------------
    Stored as {provider} slots, and an EMPTY list means every provider, so a provider added in a
@@ -1008,6 +1014,7 @@ function renderAll(){
   renderScreens();
   renderWeekly();
   drawSwitch(document.getElementById('sw-autostart'), autostart);
+  drawSwitch(document.getElementById('sw-move'), moveHandle);
   document.getElementById('title').textContent = ui(TITLES[curTab], TITLES[curTab]);
 }
 function boot(){
@@ -1035,6 +1042,7 @@ function boot(){
     setUiLanguage(l === 'auto' && typeof resolved === 'string' ? resolved : l);
   });
   autostart.refresh();
+  moveHandle.refresh();
   hooks.refresh();
 }
 /* Readings and the accent can change while the window is behind something else; coming back to it is
