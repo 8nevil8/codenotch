@@ -26,7 +26,9 @@
   #pill::before,#pill::after{
     content:"";position:absolute;right:0;width:var(--fillet);height:var(--fillet);pointer-events:none;
   }
-  #pill{--fillet:26px}
+  /* The Mac's flare radius (38.7 pt against the same 70 pt body), so the settings orb that nests in
+     this pocket can be the Mac's own size */
+  #pill{--fillet:38.7px}
   #pill::before{
     top:calc(-1 * var(--fillet)); /* covers the 1 px stroke along the pill's top edge so there is no seam */
     background:radial-gradient(circle at 0 0, transparent calc(var(--fillet) - 1.5px), #2e2e2e calc(var(--fillet) - 0.5px), #000 calc(var(--fillet) + 0.5px));
@@ -143,12 +145,40 @@
   body[data-edge="top"] #tail,body[data-edge="bottom"] #tail{right:auto;width:36px;height:32px}
   body[data-edge="top"] #tail{clip-path:path('M0 32C9 32 13.68 13.44 18 0C22.32 13.44 27 32 36 32Z')}
   body[data-edge="bottom"] #tail{clip-path:path('M0 0C9 0 13.68 18.56 18 32C22.32 18.56 27 0 36 0Z')}
+
+  /* The settings orb, past the far end of the pill as on the Mac (SettingsOrb). At rest it is a quarter
+     arc tucked into the far fillet's pocket, concentric with it and a gap inside; under the pointer the
+     same circle fills in and takes a gear. The Mac's measures, unscaled: arc radius 28.5, stroke 6.8,
+     disc 46.6, gear 21. `placeOrb` puts the box's centre on the fillet's centre. */
+  #orb{position:absolute;width:57px;height:57px;display:none;--arc:270deg}
+  #orb.placed{display:block}
+  #orb.hover{cursor:pointer}
+  #orb > *{position:absolute;left:50%;top:50%;pointer-events:none;transition:opacity .2s,transform .36s cubic-bezier(.34,1.3,.64,1)}
+  .orb-rest{width:72px;height:72px;margin:-36px 0 0 -36px;overflow:visible;transform:rotate(var(--arc)) scale(1)}
+  .orb-disc{width:46.6px;height:46.6px;margin:-23.3px 0 0 -23.3px;border-radius:50%;background:#000;border:1px solid #2e2e2e;opacity:0;transform:scale(1.1)}
+  .orb-gear{width:21px;height:21px;margin:-10.5px 0 0 -10.5px;fill:#e8e8ea;opacity:0;
+    transform:rotate(calc(var(--spins,0) * 360deg - 60deg)) scale(.5);transition:opacity .2s,transform .55s cubic-bezier(.34,1.2,.64,1)}
+  #orb.hover .orb-rest{opacity:0;transform:rotate(var(--arc)) scale(.86)}
+  #orb.hover .orb-disc{opacity:1;transform:scale(1)}
+  #orb.hover .orb-gear{opacity:1;transform:rotate(calc(var(--spins,0) * 360deg)) scale(1)}
+  /* The quarter that faces the fillet: up and outward on the right, turned for the other edges */
+  body[data-edge="left"] #orb,body[data-edge="top"] #orb{--arc:180deg}
+  body[data-edge="bottom"] #orb{--arc:90deg}
+  @media (prefers-reduced-motion: reduce){#orb > *{transition:none}}
 </style>
 </head>
 <body>
 <div id="root">
   <div id="card"></div>
   <div id="tail"></div>
+  <div id="orb">
+    <svg class="orb-rest" viewBox="-36 -36 72 72" aria-hidden="true">
+      <circle r="28.5" fill="none" stroke="#2e2e2e" stroke-width="8.8" stroke-linecap="round" stroke-dasharray="44.77 179.07"/>
+      <circle r="28.5" fill="none" stroke="#000" stroke-width="6.8" stroke-linecap="round" stroke-dasharray="44.77 179.07"/>
+    </svg>
+    <div class="orb-disc"></div>
+    <svg class="orb-gear" viewBox="0 0 12 12" aria-hidden="true"><path fill-rule="evenodd" d="M5.1.6h1.8l.3 1.5 1.1.5 1.3-.8 1.3 1.3-.8 1.3.5 1.1 1.5.3v1.8l-1.5.3-.5 1.1.8 1.3-1.3 1.3-1.3-.8-1.1.5-.3 1.5H5.1l-.3-1.5-1.1-.5-1.3.8-1.3-1.3.8-1.3-.5-1.1L.6 6.9V5.1l1.5-.3.5-1.1-.8-1.3 1.3-1.3 1.3.8 1.1-.5zM6 4.1a1.9 1.9 0 1 0 0 3.8 1.9 1.9 0 0 0 0-3.8z"/></svg>
+  </div>
   <div id="pill"></div><!-- one .cell per provider, stacked vertically (upstream: data-driven, the same layout for 1–5 cells) -->
   <div id="notice"></div>
 </div>
@@ -683,6 +713,7 @@ function rectOf(el){const r=el.getBoundingClientRect(),k=window.devicePixelRatio
 function reportHot(){
   const open=card.classList.contains('show');
   const rects=open?[rectOf(pill),rectOf(tail),rectOf(card)]:[rectOf(pill)];
+  if(placeOrb()) rects.push(rectOf(orb));
   callq('set_hot',{rects,expanded:open}).catch(()=>{});
 }
 function armWatchdog(){
@@ -724,6 +755,8 @@ function pointerInHot(x,y){
 let hideLogged=0;
 document.addEventListener('mousemove',e=>{
   if(dragging)return; // no card while dragging
+  setOrbHover(onOrb(e.clientX,e.clientY));
+  if(orbHover){ if(card.classList.contains('show')){ clearTimeout(hideTimer); hideCard(); } return; }
   const hot=pointerInHot(e.clientX,e.clientY);
   if(hot){
     clearTimeout(hideTimer);
@@ -763,6 +796,39 @@ function notice(msg){
   n.textContent=msg;n.classList.add('show');
   clearTimeout(n._h);n._h=setTimeout(()=>n.classList.remove('show'),6000);
 }
+
+/* ---- The settings orb -----------------------------------------------------
+   Placed whenever the hot rectangles are reported, since those follow every change to the pill.
+   Hover is a circle round the fillet's centre, as on the Mac, not the whole box; the card gives way
+   while the orb is under the pointer. A click opens Settings and turns the gear once. */
+const orb=document.getElementById('orb');
+const ORB_REACH=28.5; // the Mac's hot zone, half of 57
+let orbAt=null, orbHover=false, orbSpins=0;
+function placeOrb(){
+  const r=pill.getBoundingClientRect();
+  if(!r.width) return false;
+  // Measurements come back zoomed when fitZoom has zoomed the page; styles are written unzoomed
+  const z=parseFloat(document.documentElement.style.zoom)||1;
+  const R=(parseFloat(getComputedStyle(pill).getPropertyValue('--fillet'))||26)*z;
+  // The far fillet's centre: the corner of its square diagonally opposite the one on the screen edge
+  const [x,y]=notchEdge==='left'?[r.left+R,r.bottom+R]:notchEdge==='top'?[r.right+R,r.top+R]
+    :notchEdge==='bottom'?[r.right+R,r.bottom-R]:[r.right-R,r.bottom+R];
+  orbAt={x,y,reach:ORB_REACH*z};
+  orb.style.left=(x/z-ORB_REACH)+'px'; orb.style.top=(y/z-ORB_REACH)+'px';
+  orb.classList.add('placed');
+  return true;
+}
+function onOrb(x,y){ return !!orbAt&&Math.hypot(x-orbAt.x,y-orbAt.y)<=orbAt.reach; }
+function setOrbHover(on){ if(on!==orbHover){ orbHover=on; orb.classList.toggle('hover',on); } }
+document.addEventListener('mouseout',e=>{ if(!e.relatedTarget) setOrbHover(false); });
+orb.addEventListener('click',e=>{
+  if(!onOrb(e.clientX,e.clientY)) return;
+  orb.style.setProperty('--spins',++orbSpins);
+  // The Mac's press: down fast, back with a little bounce
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches)
+    orb.animate([{transform:'scale(1)',easing:'ease-out'},{transform:'scale(.84)',offset:.21,easing:'cubic-bezier(.34,1.56,.64,1)'},{transform:'scale(1)'}],{duration:430});
+  callq('open_settings').catch(()=>{});
+});
 
 listen('usage',e=>{usage=e.payload||usage;renderRing();if(card.classList.contains('show'))renderCard();})
   .catch(e=>notice('listen(usage) failed: '+e));

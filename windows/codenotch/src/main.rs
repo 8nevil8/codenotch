@@ -32,6 +32,9 @@ pub const NOTCH_W: f64 = 360.0;
 /// Hand-bumped build tag, written to run.log at startup so a log can always be matched to the exe that wrote it.
 pub const BUILD: &str = "r31";
 pub const NOTCH_H: f64 = 520.0; // 300 clipped the card once it held three window blocks plus the session list; 460 clipped Antigravity's two model groups once the reading was stale and an agent was working
+/// Height of the upright window. Five cells make a 504 px pill; its fillets add 38.7 px at each end
+/// and the settings orb reaches 28.5 px past the far one, so 520 cut both fillets and hid the orb.
+pub const NOTCH_UPRIGHT_H: f64 = 650.0;
 
 pub struct AppState {
     pub store: Mutex<state::Store>,
@@ -157,13 +160,14 @@ fn edge_origin(s: &Screen, edge: &str, ww: i32, wh: i32, ratio: f64) -> (i32, i3
 /// Pins the notch to the configured edge of the configured monitor.
 /// The notch window's logical size for an edge.
 ///
-/// Upright on the left and right, the pill is a column and 360 wide is plenty. Lying flat on the
-/// top and bottom it is a row: five 56 px rings, their gaps, the padding and both fillets already
-/// come to about 424 px, so a 360 px window clipped the pill once a fifth provider was on. The
-/// flat window keeps the full height too, for the hover card that opens below or above the pill.
+/// Upright on the left and right, the pill is a column and 360 wide is plenty; its length is what
+/// needs room, hence `NOTCH_UPRIGHT_H`. Lying flat on the top and bottom it is a row: five 56 px
+/// rings, their gaps, the padding, both fillets and the settings orb come to about 506 px, so a
+/// 360 px window clipped the pill once a fifth provider was on. The flat window keeps the full
+/// height too, for the hover card that opens below or above the pill.
 pub fn notch_window_size(edge: &str) -> (f64, f64) {
     if config::edge_is_vertical(edge) {
-        (NOTCH_W, NOTCH_H)
+        (NOTCH_W, NOTCH_UPRIGHT_H)
     } else {
         (NOTCH_H, NOTCH_H)
     }
@@ -189,7 +193,11 @@ pub fn place_notch(app: &AppHandle) {
             config::edge_or_right(&c.notch_edge)
         };
         let (width, height) = notch_window_size(&edge);
-        let target = tauri::PhysicalSize::new((width * ms * size).round() as u32, (height * ms * size).round() as u32);
+        // Never taller or wider than the screen: Large on a small, highly scaled display can ask for more
+        let target = tauri::PhysicalSize::new(
+            ((width * ms * size).round() as u32).min(mon.w.max(1) as u32),
+            ((height * ms * size).round() as u32).min(mon.h.max(1) as u32),
+        );
         let _ = w.set_size(target);
         zoom_notch(&w, ms, size);
         // Position from the window's measured physical size — deriving it from the scale factor
@@ -1421,15 +1429,27 @@ mod tests {
 
     #[test]
     fn a_flat_notch_is_wide_enough_for_five_rings() {
-        // 5 × 56 px rings + 4 × 14 px gaps + 36 px padding + 2 × 26 px fillets
-        let pill = 5.0 * 56.0 + 4.0 * 14.0 + 36.0 + 2.0 * 26.0;
+        // 5 × 56 px rings + 4 × 14 px gaps + 36 px padding + 2 × 38.7 px fillets + the orb's 28.5 px reach
+        let pill = 5.0 * 56.0 + 4.0 * 14.0 + 36.0 + 2.0 * (38.7 + 28.5);
         for edge in ["top", "bottom"] {
             let (w, h) = notch_window_size(edge);
             assert!(w >= pill, "{edge}: {w} px cannot hold a {pill} px pill");
             assert_eq!(h, NOTCH_H, "{edge}: the hover card still needs the full height");
         }
         for edge in ["left", "right"] {
-            assert_eq!(notch_window_size(edge), (NOTCH_W, NOTCH_H));
+            assert_eq!(notch_window_size(edge), (NOTCH_W, super::NOTCH_UPRIGHT_H));
+        }
+    }
+
+    /// The pill sits in the middle of the window, so half of it, a fillet and the settings orb's reach
+    /// all have to fit between the centre and each end.
+    #[test]
+    fn an_upright_notch_has_room_for_five_rings_and_the_orb() {
+        // 5 cells (56 px ring + 6 px gap + 21 px percentage) + 4 × 14 px gaps + 36 px padding
+        let pill = 5.0 * (56.0 + 6.0 + 21.0) + 4.0 * 14.0 + 36.0;
+        for edge in ["left", "right"] {
+            let (_, h) = notch_window_size(edge);
+            assert!(h / 2.0 >= pill / 2.0 + 38.7 + 28.5, "{edge}: {h} px leaves no room for the orb");
         }
     }
 
