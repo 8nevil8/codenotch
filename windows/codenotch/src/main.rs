@@ -213,20 +213,18 @@ pub fn place_notch(app: &AppHandle) {
         }
         // The page mirrors itself for the edge it is on; it cannot know that on its own.
         let _ = w.emit("notch_edge", &edge);
-        // Placement log line: the first thing to check when the notch is not visible
-        let log = config::config_path().with_file_name("run.log");
-        let _ = std::fs::write(
-            log,
-            format!(
-                "notch placed build={BUILD}: edge={edge} pos=({x},{y}) size=({ww}x{wh}) inner={:?} win_scale={scale} mon_scale={ms} notch_size={size} monitor={:?}=({},{} {}x{})\n",
-                w.inner_size().map(|s| (s.width, s.height)).unwrap_or((0, 0)),
-                mon.name,
-                mon.x,
-                mon.y,
-                mon.w,
-                mon.h
-            ),
-        );
+        // Placement log line: the first thing to check when the notch is not visible. Appended, not
+        // overwritten — place_notch runs after every drag as well as at startup, and a truncating
+        // write here would wipe the rest of the session's diagnostic trail on every drag.
+        applog(&format!(
+            "notch placed build={BUILD}: edge={edge} pos=({x},{y}) size=({ww}x{wh}) inner={:?} win_scale={scale} mon_scale={ms} notch_size={size} monitor={:?}=({},{} {}x{})",
+            w.inner_size().map(|s| (s.width, s.height)).unwrap_or((0, 0)),
+            mon.name,
+            mon.x,
+            mon.y,
+            mon.w,
+            mon.h
+        ));
     }
 }
 

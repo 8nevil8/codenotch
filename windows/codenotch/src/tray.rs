@@ -181,6 +181,7 @@ fn refresh_provider(app: &AppHandle, provider: &str) {
     match provider {
         "codex" => crate::codex::request_refresh(),
         "cursor" => crate::cursor::request_refresh(),
+        "grok" => crate::grok::request_refresh(),
         "gemini" => crate::antigravity::request_refresh(),
         _ => {
             {
