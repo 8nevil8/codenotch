@@ -299,8 +299,7 @@ pub(crate) fn edge_at(x: f64, y: f64, w: f64, h: f64) -> &'static str {
 /// hands it over. The notch itself stays where it is until then — what is being chosen is a place on
 /// the screen, not a distance moved, so nothing follows the pointer.
 ///
-/// `depth` and `length` are the pill's own measurements in the notch page's CSS px; they are the
-/// size the zones draw, so a zone is the notch rather than a guess at it.
+/// `depth` and `length` are the pill's own measurements standing upright, in the notch page's CSS px.
 #[tauri::command]
 fn begin_move(app: AppHandle, depth: f64, length: f64) {
     if DRAGGING.swap(true, std::sync::atomic::Ordering::SeqCst) {

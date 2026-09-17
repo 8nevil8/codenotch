@@ -869,15 +869,26 @@ function pressIn(el){
 /* Holding the move handle puts the notch in hand: Rust raises the drop zones and follows the pointer
    until the button comes up. The notch itself does not move — what is being chosen is a place on the
    screen, not a distance. The pill's own size goes with it, so a zone is the notch, not a guess. */
+/* The shape the zones draw: the pill standing upright, whichever edge it is on now. Worked out from
+   the parts it is made of rather than measured, so a notch lying flat still offers the same
+   silhouette everywhere — the 70 px depth and the 18 px end padding are the pill's own, from the CSS
+   above. The notch really is shallower and shorter lying flat, but drawing that would offer four
+   outlines of two sizes, which reads as four different things instead of one notch offered a place. */
+function pillShapes(){
+  const cells=Math.max(1,pill.querySelectorAll('.cell').length);
+  const ring=(pill.querySelector('.ringwrap')||{}).offsetHeight||56;
+  const label=(pill.querySelector('.pct')||{}).offsetHeight||20;
+  const ends=36, between=14, underRing=6;
+  return { depth:70, length:ends+cells*(ring+underRing+label)+(cells-1)*between };
+}
 moveHandle.addEventListener('mousedown',e=>{
   if(e.button!==0||!near(moveAt,e.clientX,e.clientY)) return;
   e.stopPropagation();
-  const r=pill.getBoundingClientRect(), flat=!edgeIsVertical();
   carrying=true;
   moveHandle.classList.add('armed','hover');
   moveHandle.style.setProperty('--spins',++moveSpins);
   clearTimeout(hideTimer); hideCard();
-  callq('begin_move',{depth:flat?r.height:r.width,length:flat?r.width:r.height}).catch(()=>{carrying=false;moveHandle.classList.remove('armed');});
+  callq('begin_move',pillShapes()).catch(()=>{carrying=false;moveHandle.classList.remove('armed');});
 });
 listen('move_end',()=>{ carrying=false; moveHandle.classList.remove('armed'); setHovered(null); reportHot(); }).catch(()=>{});
 listen('move_handle',e=>{ showMove=e.payload!==false; reportHot(); }).catch(()=>{});

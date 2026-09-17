@@ -12,12 +12,15 @@ const LABEL: &str = "dropzones";
 /// The last state pushed, for a page that finished loading after it was sent.
 static CURRENT: Mutex<Option<Zones>> = Mutex::new(None);
 
-/// What the page needs to draw itself: its own size, the notch's resting shape, and the target.
+/// What the page needs to draw itself: its own size, the notch's shape and the target. One shape for
+/// all four zones, turned on its side for the flat edges, as the Mac does — the notch really is a
+/// different size lying flat, but four outlines of four different sizes read as four different
+/// things rather than as one notch offered four places.
 #[derive(Clone, serde::Serialize)]
 pub struct Zones {
     pub w: f64,
     pub h: f64,
-    /// How deep the notch sits against its edge, and how far it runs along it, in the page's CSS px
+    /// How deep the notch sits against its edge and how far it runs along it, in the page's CSS px
     pub depth: f64,
     pub length: f64,
     pub target: String,

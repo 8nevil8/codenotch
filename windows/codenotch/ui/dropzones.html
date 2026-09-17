@@ -32,8 +32,8 @@
 const invoke = window.__TAURI__.core.invoke;
 const listen = window.__TAURI__.event.listen;
 
-/* A side edge takes the notch's length down the screen; a flat one turns it on its side, the way the
-   notch itself does. Depth and length arrive as the pill's own measurements. */
+/* One shape, turned on its side for the flat edges: a column down a side edge, a row along a flat
+   one. Depth and length are the pill's own, standing upright. */
 function draw(z){
   if(!z) return;
   const depth=Math.round(z.depth), length=Math.round(z.length);
