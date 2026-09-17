@@ -32,6 +32,28 @@ enum ReleaseNotes {
     static var all: [ReleaseNote] {
         [
             ReleaseNote(
+                version: "1.13.1",
+                headline: L10n.t("Fixes a crash on Chinese Macs, and a Deny on the keychain question now means no."),
+                changes: [
+                    ReleaseNote.Change(
+                        title: L10n.t("No more crash in Simplified Chinese"),
+                        detail: L10n.t("With the app in 简体中文, a provider past 80% crashed Codenotch a few seconds after launch. Every translation is now checked for this.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("Deny means no"),
+                        detail: L10n.t("Answering Deny when macOS asks about a saved login now stops Codenotch reading that account from any source, until you choose Allow access… again.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("Fewer file access prompts"),
+                        detail: L10n.t("Renewing Claude's login no longer starts your MCP servers and hooks, and Kimi sessions are matched without looking inside your folders, so macOS no longer asks about Documents, Desktop or network volumes on Codenotch's behalf.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("Smaller fixes"),
+                        detail: L10n.t("Kiro reads usage from newer kiro-cli versions, GLM Start Plan says why it has no usage, a Claude account with no published limits says so instead of waiting, and the Windows notch clears a stuck waiting card after a day.")
+                    ),
+                ]
+            ),
+            ReleaseNote(
                 version: "1.13.0",
                 headline: L10n.t("Much lighter on your battery, Grok and screen edges on Windows, and a Windows Settings window that opens again."),
                 changes: [
