@@ -198,6 +198,8 @@ function applyEdge(e){
   if(next===notchEdge) return;
   notchEdge=next;
   document.body.dataset.edge=next;
+  // The window changes shape with the edge, and so does the width the zoom correction measures against
+  reportDpr();
   // The pill changes shape, so both the hot rectangles and the card's anchor have to be measured again
   if(card&&card.classList.contains('show')) placeCard();
   reportHot();
@@ -769,10 +771,16 @@ function reportHot(){
 function armWatchdog(){
   requestAnimationFrame(reportHot); // wait one frame so renderCard's new content is laid out before measuring
 }
-// Viewport fit (pure front-end fallback, independent of Rust): Rust sizes and zooms the window so this page is 360 CSS px wide,
-// so if this page's CSS viewport is not 360 wide the WebView's DPR disagrees with the monitor; CSS zoom pulls the layout back to the design size.
+// Viewport fit (pure front-end fallback, independent of Rust): Rust sizes and zooms the window so this
+// page is as wide as the design, so if the CSS viewport is not that wide the WebView's DPR disagrees
+// with the monitor; CSS zoom pulls the layout back to the design size.
+// The design width is the window's, and the window is not the same shape on every edge — see
+// `notch_window_size` in main.rs: NOTCH_W upright, NOTCH_H lying flat. Dividing by 360 on a flat edge
+// read the wider window as a DPR error and zoomed the whole notch by 520/360.
+const DESIGN_W_UPRIGHT=360, DESIGN_W_FLAT=520;
+function designWidth(){ return edgeIsVertical()?DESIGN_W_UPRIGHT:DESIGN_W_FLAT; }
 function fitZoom(){
-  const z=innerWidth/360;
+  const z=innerWidth/designWidth();
   document.documentElement.style.zoom=(Math.abs(z-1)>0.02)?String(z):'';
   return z;
 }
@@ -781,7 +789,9 @@ function reportDpr(){
   jslog(`dpr=${window.devicePixelRatio} inner=${innerWidth}x${innerHeight} cssZoom=${z.toFixed(3)}`);
   callq('report_dpr',{dpr:window.devicePixelRatio||1,w:innerWidth,h:innerHeight}).catch(()=>{});
 }
-reportDpr();
+// Not measured yet: the width to measure against depends on the edge, and only Rust knows it. The
+// ask is at the bottom of this file and answers in a round trip; measuring first would zoom a flat
+// window by 520/360 for that moment.
 window.addEventListener('resize',()=>{clearTimeout(window._dprT);window._dprT=setTimeout(()=>{reportDpr();reportHot();},120);});
 matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener('change',reportDpr);
 
@@ -875,7 +885,9 @@ invoke('get_glyphs').then(g=>{glyphs=g||glyphs;renderRing();}).catch(()=>{});
 // The edge: pushed on every placement (a drag that snapped elsewhere, or Settings), and asked for once
 // at startup in case the placement happened before this page was listening.
 listen('notch_edge',e=>applyEdge(e.payload)).catch(()=>{});
-invoke('get_notch_edge').then(applyEdge).catch(()=>{});
+// applyEdge measures for the edge it is given; on the right-hand one it returns early, so the first
+// measurement is made here either way — and still made if the ask fails, from the default edge.
+invoke('get_notch_edge').then(e=>{applyEdge(e);reportDpr();}).catch(()=>reportDpr());
 invoke('get_codex').then(u=>{codexSnap=u||codexSnap;renderRing();}).catch(()=>{});
 invoke('get_usage').then(u=>{usage=u||usage;renderRing();}).catch(e=>notice('get_usage failed: '+e));
 invoke('get_state').then(s=>{stateSnap=s||stateSnap;setUiLanguage(stateSnap.lang_resolved);renderRing();}).catch(()=>{});
