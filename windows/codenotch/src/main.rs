@@ -283,6 +283,37 @@ pub fn place_notch(app: &AppHandle) {
     }
 }
 
+/// How often the work area is re-read. It only changes by hand — the taskbar moved to another edge,
+/// resized, or switched to auto-hide — so a second late is not noticeable.
+const WORK_AREA_POLL_MS: u64 = 1000;
+
+/// Puts the notch back on its edge when the work area moves under it.
+///
+/// Nothing hands us `WM_SETTINGCHANGE`, and the notch is placed against the work area now, so
+/// moving the taskbar to another edge would otherwise leave the notch a taskbar's width from the
+/// edge it is pinned to, floating in the gap the old taskbar left. Polled rather than hooked,
+/// because hooking it means subclassing a window we do not own to catch something that happens
+/// once in a session.
+fn start_work_area_watch(app: AppHandle) {
+    std::thread::spawn(move || {
+        let mut last = target_screen(&app).map(|s| s.work);
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(WORK_AREA_POLL_MS));
+            // Mid-drag the notch is following the pointer, and placing it again would fight that.
+            if DRAGGING.load(std::sync::atomic::Ordering::SeqCst) {
+                continue;
+            }
+            let now = target_screen(&app).map(|s| s.work);
+            if now == last {
+                continue;
+            }
+            applog(&format!("work area changed: {last:?} -> {now:?}"));
+            last = now;
+            place_notch(&app);
+        }
+    });
+}
+
 /// Older entry point name still used by tray.rs. Recentre puts the notch in the middle of the edge it
 /// is on, and only sends it home to the primary monitor's right edge when the screen it was on is
 /// gone — which is the case the button exists for, and the one where its own edge means nothing.
@@ -1579,6 +1610,7 @@ fn main() {
             let gh = handle.clone();
             std::thread::spawn(move || reload_glyphs(&gh));
             start_pointer_watchdog(handle.clone());
+            start_work_area_watch(handle.clone());
             // Seen-clears-it scan
             let acker = handle.clone();
             std::thread::spawn(move || {
