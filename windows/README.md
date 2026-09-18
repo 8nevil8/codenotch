@@ -73,7 +73,9 @@ offers **Refresh now**, the provider's usage page (**Open claude.ai**, **Open ch
 
 ### Where the notch sits
 
-The notch pins to one edge of one screen. **Appearance → Edge** picks left, right, top or bottom:
+The notch pins to one edge of one screen. The arc above the pill carries it: hold it, and the four
+places it can go are outlined on the screen; release on one and the notch lands there, centred.
+**Appearance → Show move handle** hides that arc. **Appearance → Edge** picks left, right, top or bottom:
 it stands upright on the left and right edges with the hover card opening sideways, and lies flat
 on the top and bottom ones with the card opening below or above. **Appearance → Screen** appears
 once more than one monitor is attached.
@@ -83,7 +85,7 @@ of the screen it was dropped on — across monitors, and across a change of DPI 
 choice is stored as `notch_edge`, `notch_monitor` (the device name, e.g. `\\.\DISPLAY2`) and
 `notch_y` (the position along the edge, 0–1) in `config.json`. A monitor that is no longer
 attached falls back to the primary one, so unplugging a screen cannot strand the notch off-screen;
-**Recentre** also puts it back on the primary screen's right-hand edge.
+**Recentre** centres it on the edge it is on, or on the primary screen's right-hand edge when the screen it was on is gone.
 
 ### Icons
 
