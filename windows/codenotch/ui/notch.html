@@ -192,6 +192,18 @@ let activity=[]; // working state of the non-Claude providers: {provider,state:'
 /* Which screen edge the notch is pinned to. Rust owns it (it is what placed the window); the page is
    told so it can mirror or rotate itself to match. 'right' is the default and the pre-edge layout. */
 let notchEdge='right';
+/* How much of the window the taskbar covers, in CSS px, from Rust: top, right, bottom, left. The pill
+   stays against the screen edge; the card is kept out of these. */
+let insets=[0,0,0,0];
+function applyInsets(v){
+  const next=Array.isArray(v)&&v.length===4?v.map(n=>Math.max(0,Number(n)||0)):[0,0,0,0];
+  if(next.every((n,i)=>n===insets[i])) return;
+  insets=next;
+  if(card&&card.classList.contains('show')){ placeCard(); reportHot(); }
+}
+// Pushed on every placement, and asked for once in case the placement happened before this page was listening
+listen('notch_insets',e=>applyInsets(e.payload)).catch(()=>{});
+invoke('get_notch_insets').then(applyInsets).catch(()=>{});
 function edgeIsVertical(){ return notchEdge==='left'||notchEdge==='right'; }
 function applyEdge(e){
   const next=(e==='left'||e==='top'||e==='bottom')?e:'right';
@@ -718,7 +730,7 @@ function placeCard(){
   if(edgeIsVertical()){
     const cy=cr.top+cr.height/2;
     const H=innerHeight, ch=card.offsetHeight||0;
-    let top=Math.round(cy-ch/2); top=Math.max(8,Math.min(top,H-ch-8));
+    let top=Math.round(cy-ch/2); top=Math.max(8+insets[0],Math.min(top,H-insets[2]-ch-8));
     card.style.top=top+'px'; card.style.left='';
     const ry=rr.top+rr.height/2;
     const th=tail.offsetHeight||36, ty=Math.max(top+16+th/2,Math.min(top+ch-16-th/2,ry));
@@ -727,7 +739,7 @@ function placeCard(){
     const pr=pill.getBoundingClientRect();
     const cx=cr.left+cr.width/2;
     const W=innerWidth, cw=card.offsetWidth||0, ch=card.offsetHeight||0;
-    let left=Math.round(cx-cw/2); left=Math.max(8,Math.min(left,W-cw-8));
+    let left=Math.round(cx-cw/2); left=Math.max(8+insets[3],Math.min(left,W-insets[1]-cw-8));
     card.style.left=left+'px';
     const rx=rr.left+rr.width/2;
     const tw=tail.offsetWidth||36, tx=Math.max(left+16+tw/2,Math.min(left+cw-16-tw/2,rx));

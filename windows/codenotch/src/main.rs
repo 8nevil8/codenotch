@@ -84,10 +84,13 @@ pub struct Screen {
     pub w: i32,
     pub h: i32,
     pub scale: f64,
+    /// The work area: the monitor less the taskbar and anything else docked to its edges.
+    pub work: (i32, i32, i32, i32),
 }
 
 impl Screen {
     fn of(m: &tauri::window::Monitor) -> Self {
+        let wa = m.work_area();
         Self {
             name: m.name().cloned(),
             x: m.position().x,
@@ -95,6 +98,7 @@ impl Screen {
             w: m.size().width as i32,
             h: m.size().height as i32,
             scale: m.scale_factor(),
+            work: (wa.position.x, wa.position.y, wa.size.width as i32, wa.size.height as i32),
         }
     }
     fn contains(&self, x: i32, y: i32) -> bool {
@@ -154,6 +158,22 @@ fn edge_origin(s: &Screen, edge: &str, ww: i32, wh: i32, ratio: f64) -> (i32, i3
     }
 }
 
+/// How far the taskbar (or anything else outside the work area) covers each side of a window at
+/// (x, y, ww, wh), in physical pixels: top, right, bottom, left. The pill keeps its place against
+/// the screen edge; only the hover card, which the page can move, is kept clear of these.
+fn work_insets(s: &Screen, x: i32, y: i32, ww: i32, wh: i32) -> [i32; 4] {
+    let (wx, wy, waw, wah) = s.work;
+    [
+        (wy - y).clamp(0, wh),
+        ((x + ww) - (wx + waw)).clamp(0, ww),
+        ((y + wh) - (wy + wah)).clamp(0, wh),
+        (wx - x).clamp(0, ww),
+    ]
+}
+
+/// The last insets pushed to the page, in its CSS px, for a page that asks before it was listening.
+static NOTCH_INSETS: Mutex<[f64; 4]> = Mutex::new([0.0; 4]);
+
 /// Pins the notch to the configured edge of the configured monitor.
 /// The notch window's logical size for an edge.
 ///
@@ -206,25 +226,34 @@ pub fn place_notch(app: &AppHandle) {
         };
         let (x, y) = edge_origin(&mon, &edge, ww, wh, ratio);
         let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
+        let mut placed = (x, y, ww, wh);
         if w.outer_size().map(|s| s.width != target.width).unwrap_or(false) {
             let _ = w.set_size(target);
             let (x, y) = edge_origin(&mon, &edge, target.width as i32, target.height as i32, ratio);
             let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
+            placed = (x, y, target.width as i32, target.height as i32);
         }
         // The page mirrors itself for the edge it is on; it cannot know that on its own.
         let _ = w.emit("notch_edge", &edge);
+        // Nor can it see the taskbar: a card opened near the bottom of a side edge slid under it.
+        // The page is `size` × the monitor scale smaller than the window in CSS px.
+        let css = (ms * size).max(0.01);
+        let insets = work_insets(&mon, placed.0, placed.1, placed.2, placed.3).map(|v| v as f64 / css);
+        *NOTCH_INSETS.lock().unwrap() = insets;
+        let _ = w.emit("notch_insets", insets);
         // Placement log line: the first thing to check when the notch is not visible
         let log = config::config_path().with_file_name("run.log");
         let _ = std::fs::write(
             log,
             format!(
-                "notch placed build={BUILD}: edge={edge} pos=({x},{y}) size=({ww}x{wh}) inner={:?} win_scale={scale} mon_scale={ms} notch_size={size} monitor={:?}=({},{} {}x{})\n",
+                "notch placed build={BUILD}: edge={edge} pos=({x},{y}) size=({ww}x{wh}) inner={:?} win_scale={scale} mon_scale={ms} notch_size={size} monitor={:?}=({},{} {}x{}) work={:?} card_insets_css={insets:?}\n",
                 w.inner_size().map(|s| (s.width, s.height)).unwrap_or((0, 0)),
                 mon.name,
                 mon.x,
                 mon.y,
                 mon.w,
-                mon.h
+                mon.h,
+                mon.work
             ),
         );
     }
@@ -1069,6 +1098,12 @@ fn reset_notch_position(app: AppHandle) {
     reset_bar(&app);
 }
 
+/// How much of the notch window the taskbar covers, in the page's CSS px: top, right, bottom, left.
+#[tauri::command]
+fn get_notch_insets() -> [f64; 4] {
+    *NOTCH_INSETS.lock().unwrap()
+}
+
 /// Which screen edge the notch is pinned to.
 #[tauri::command]
 fn get_notch_edge(app: AppHandle) -> String {
@@ -1348,6 +1383,7 @@ fn main() {
             set_hooks_installed,
             reset_notch_position,
             get_notch_edge,
+            get_notch_insets,
             set_notch_edge,
             get_monitors,
             set_notch_monitor,
@@ -1416,8 +1452,20 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{cursor_in_hot, notch_window_size, ring_window, HOT_PAD, NOTCH_H, NOTCH_W};
+    use super::{cursor_in_hot, notch_window_size, ring_window, work_insets, Screen, HOT_PAD, NOTCH_H, NOTCH_W};
     use crate::usage::LimitWindow;
+
+    #[test]
+    fn the_taskbar_is_measured_against_the_window() {
+        // 3200 × 2000 with a 72 px taskbar along the bottom
+        let s = Screen { name: None, x: 0, y: 0, w: 3200, h: 2000, scale: 1.5, work: (0, 0, 3200, 1928) };
+        assert_eq!(work_insets(&s, 2768, 1376, 432, 624), [0, 0, 72, 0], "right edge, at the bottom");
+        assert_eq!(work_insets(&s, 2768, 512, 432, 624), [0, 0, 0, 0], "right edge, clear of it");
+        assert_eq!(work_insets(&s, 1000, 1928, 624, 624).map(|v| v <= 624), [true; 4], "never more than the window");
+        // A taskbar on the left
+        let s = Screen { work: (72, 0, 3128, 2000), ..s };
+        assert_eq!(work_insets(&s, 0, 700, 432, 624), [0, 0, 0, 72]);
+    }
 
     #[test]
     fn a_flat_notch_is_wide_enough_for_five_rings() {
