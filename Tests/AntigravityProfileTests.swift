@@ -43,29 +43,32 @@ final class AntigravityProfileTests: XCTestCase {
         let dir = home.appendingPathComponent(".gemini/antigravity-work")
         let profile = AntigravityProfile(slug: "work", configDirectory: dir)
         XCTAssertEqual(profile.slug, "work")
-        XCTAssertEqual(profile.id, "gemini-work")
+        XCTAssertEqual(profile.id, "antigravity-work")
         XCTAssertEqual(profile.displayName, "Antigravity (work)")
         XCTAssertEqual(profile.authURL.path, "/Users/test/.gemini/antigravity-work/oauth_creds.json")
         XCTAssertEqual(profile.brainDirectory.path, "/Users/test/.gemini/antigravity-work/brain")
         XCTAssertEqual(profile.keychainService, "gemini")
         XCTAssertEqual(profile.keychainAccount, "antigravity-work")
-        XCTAssertEqual(profile.sourceName, "Antigravity in \(profile.displayPath)")
+        XCTAssertEqual(profile.sourceName, L10n.t("Antigravity in \(profile.displayPath)"))
         XCTAssertEqual(AntigravityProvider(profile: profile).signInRoute,
-                       .guidance("Sign in to Antigravity in \(profile.displayPath) to read your usage."))
+                       .guidance(L10n.t("Sign in to Antigravity in ~/.gemini/antigravity-work to read your usage")))
     }
 
     func testProviderIDsAreRecognised() {
         XCTAssertTrue(AntigravityProfile.isAntigravity(providerID: "gemini"))
-        XCTAssertTrue(AntigravityProfile.isAntigravity(providerID: "gemini-work"))
-        XCTAssertTrue(AntigravityProfile.isAntigravity(providerID: "gemini-alpha"))
+        XCTAssertTrue(AntigravityProfile.isAntigravity(providerID: "antigravity-work"))
+        XCTAssertTrue(AntigravityProfile.isAntigravity(providerID: "antigravity-alpha"))
+        XCTAssertFalse(AntigravityProfile.isAntigravity(providerID: "gemini-api"))
+        XCTAssertFalse(AntigravityProfile.isAntigravity(providerID: "gemini-work"))
         XCTAssertFalse(AntigravityProfile.isAntigravity(providerID: "geminiapi"))
         XCTAssertFalse(AntigravityProfile.isAntigravity(providerID: "claude"))
         XCTAssertFalse(AntigravityProfile.isAntigravity(providerID: "cursor"))
 
-        XCTAssertEqual(AntigravityProfile.slug(fromProviderID: "gemini-work"), "work")
-        XCTAssertEqual(AntigravityProfile.slug(fromProviderID: "gemini-client-a"), "client-a")
+        XCTAssertEqual(AntigravityProfile.slug(fromProviderID: "antigravity-work"), "work")
+        XCTAssertEqual(AntigravityProfile.slug(fromProviderID: "antigravity-client-a"), "client-a")
         XCTAssertNil(AntigravityProfile.slug(fromProviderID: "gemini"))
-        XCTAssertNil(AntigravityProfile.slug(fromProviderID: "gemini-"))
+        XCTAssertNil(AntigravityProfile.slug(fromProviderID: "gemini-api"))
+        XCTAssertNil(AntigravityProfile.slug(fromProviderID: "antigravity-"))
         XCTAssertNil(AntigravityProfile.slug(fromProviderID: "cursor"))
     }
 
@@ -77,6 +80,7 @@ final class AntigravityProfileTests: XCTestCase {
         XCTAssertNil(AntigravityProfile.slug(fromDirectoryName: "antigravity-ide"), "ide is internal flavour")
         XCTAssertNil(AntigravityProfile.slug(fromDirectoryName: "antigravity-cli"), "cli is internal flavour")
         XCTAssertNil(AntigravityProfile.slug(fromDirectoryName: "antigravity-backup"), "backup is internal flavour")
+        XCTAssertNil(AntigravityProfile.slug(fromDirectoryName: "antigravity-api"), "api is internal flavour")
         XCTAssertNil(AntigravityProfile.slug(fromDirectoryName: "not-antigravity-work"))
     }
 
@@ -86,32 +90,69 @@ final class AntigravityProfileTests: XCTestCase {
         let root = try home([
             "antigravity": ["oauth_creds.json"],
             "antigravity-work": ["oauth_creds.json"],
-            "antigravity-alpha": ["brain/uuid/.system_generated/logs/transcript.jsonl"],
+            "antigravity-alpha": ["oauth_creds.json"],
             "antigravity-ide": ["oauth_creds.json"],
             "antigravity-cli": ["oauth_creds.json"],
             "antigravity-backup": ["agent.db"],
             "antigravity-empty": [],
+            "antigravity-settings-only": ["settings.json"],
+            "antigravity-state-only": ["state"],
+            "antigravity-no-creds": ["brain/uuid/transcript.jsonl"],
             "other-tool": ["oauth_creds.json"]
         ])
 
         let found = AntigravityProfile.discover(home: root)
-        XCTAssertEqual(found.map(\.id), ["gemini", "gemini-alpha", "gemini-work"])
+        XCTAssertEqual(found.map(\.id), ["gemini", "antigravity-alpha", "antigravity-work"])
         XCTAssertEqual(found.map(\.displayName), ["Antigravity", "Antigravity (alpha)", "Antigravity (work)"])
         XCTAssertEqual(found[0].configDirectory, root.appendingPathComponent(".gemini/antigravity"))
         XCTAssertEqual(found[1].configDirectory, root.appendingPathComponent(".gemini/antigravity-alpha"))
         XCTAssertEqual(found[2].configDirectory, root.appendingPathComponent(".gemini/antigravity-work"))
     }
 
+    func testDiscoveryRequiresCredentials() throws {
+        let root = try home([
+            "antigravity-work": ["oauth_creds.json"],
+            "antigravity-settings": ["settings.json"],
+            "antigravity-state": ["state"],
+            "antigravity-brain-only": ["brain/agent.db"]
+        ])
+
+        let found = AntigravityProfile.discover(home: root)
+        XCTAssertEqual(found.map(\.id), ["gemini", "antigravity-work"])
+    }
+
     func testDiscoveryRespectsCredentialFilter() throws {
         let root = try home([
             "antigravity-work": ["oauth_creds.json"],
-            "antigravity-test": ["settings.json"]
+            "antigravity-test": ["oauth_creds.json"]
         ])
 
         let found = AntigravityProfile.discover(home: root) { profile in
             profile.slug != "test"
         }
-        XCTAssertEqual(found.map(\.id), ["gemini", "gemini-work"])
+        XCTAssertEqual(found.map(\.id), ["gemini", "antigravity-work"])
+    }
+
+    // MARK: - Gemini-API Clash Prevention & Default-Off Rule
+
+    func testGeminiAPIClashPrevention() {
+        XCTAssertFalse(AntigravityProfile.isAntigravity(providerID: "gemini-api"))
+        XCTAssertNil(AntigravityProfile.slug(fromProviderID: "gemini-api"))
+        let summary = ProviderSummary(id: "gemini-api", name: "Gemini API", glyph: .geminiSpark, account: nil, signIn: .guidance(""))
+        XCTAssertFalse(summary.usesKeychain)
+        XCTAssertFalse(Preferences.isDefaultOnFamily("gemini-api"))
+        XCTAssertNil(AntigravityProfile.slug(fromDirectoryName: "antigravity-api"))
+    }
+
+    func testAntigravityDefaultsOff() {
+        XCTAssertFalse(Preferences.isDefaultOnFamily("gemini"), "Antigravity default must start off")
+        XCTAssertFalse(Preferences.isDefaultOnFamily("antigravity-work"), "Antigravity profile must start off")
+        XCTAssertFalse(Preferences.isDefaultOnFamily("antigravity-personal"), "Antigravity profile must start off")
+        XCTAssertFalse(Preferences.isDefaultOnFamily("gemini-api"), "gemini-api must start off")
+        XCTAssertTrue(Preferences.isDefaultOnFamily("claude"), "Claude defaults on")
+        XCTAssertTrue(Preferences.isDefaultOnFamily("claude-work"), "Claude profiles default on")
+        XCTAssertTrue(Preferences.isDefaultOnFamily("codex"), "Codex defaults on")
+        XCTAssertTrue(Preferences.isDefaultOnFamily("codex-work"), "Codex profiles default on")
     }
 
     // MARK: - Activity Monitor Roots
@@ -162,5 +203,24 @@ final class AntigravityProfileTests: XCTestCase {
 
         AntigravityCredentials.forgetCached(for: workProfile)
         XCTAssertNil(AntigravityCredentials.held(for: workProfile))
+    }
+
+    func testForgetCachedCredentialGrantsPromptPermission() {
+        let home = URL(fileURLWithPath: "/Users/test")
+        let dir = home.appendingPathComponent(".gemini/antigravity-work")
+        let workProfile = AntigravityProfile(slug: "work", configDirectory: dir)
+        let provider = AntigravityProvider(profile: workProfile)
+
+        var promptedInteractive: Bool?
+        AntigravityCredentials.readKeychainForTesting = { interactive in
+            promptedInteractive = interactive
+            return (errSecItemNotFound, nil)
+        }
+        addTeardownBlock { AntigravityCredentials.readKeychainForTesting = nil }
+
+        provider.forgetCachedCredential()
+        _ = try? AntigravityCredentials.load(for: workProfile)
+
+        XCTAssertEqual(promptedInteractive, true, "Allow access... must grant interactive permission for extra profile")
     }
 }

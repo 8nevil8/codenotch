@@ -18,7 +18,7 @@ actor AntigravityProvider: UsageProvider {
     nonisolated let profile: AntigravityProfile
     nonisolated let id: String
     // The id stays `gemini` for default profile: it keys the archive and the user's connection
-    // choice, and changing it would silently discard both. Additional profiles are `gemini-<slug>`.
+    // choice, and changing it would silently discard both. Additional profiles are `antigravity-<slug>`.
     nonisolated let displayName: String
     nonisolated let glyph = ProviderGlyph.antigravity
 
@@ -70,9 +70,7 @@ actor AntigravityProvider: UsageProvider {
     /// Reached only from "Allow access…", so it may let the next read prompt.
     nonisolated func forgetCachedCredential() {
         AntigravityCredentials.forgetCached(for: profile)
-        if profile.slug == nil {
-            AntigravityCredentials.askAgain()
-        }
+        AntigravityCredentials.askAgain()
     }
 
     nonisolated func account() -> ProviderAccount? {

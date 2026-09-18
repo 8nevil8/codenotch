@@ -14,7 +14,7 @@ struct AntigravityProfile: Equatable, Hashable {
 
     /// Internal tool flavours under `~/.gemini` that belong to the default installation
     /// rather than separate user accounts.
-    static let ignoredSlugs: Set<String> = ["ide", "cli", "backup"]
+    static let ignoredSlugs: Set<String> = ["ide", "cli", "backup", "api"]
 
     /// Nil for `~/.gemini/antigravity`; the part after `antigravity-` otherwise.
     let slug: String?
@@ -29,10 +29,10 @@ struct AntigravityProfile: Equatable, Hashable {
     }
 
     /// The default profile followed by every `~/.gemini/antigravity-<slug>` that contains
-    /// profile markers or credentials, slugs in alphabetical order.
+    /// profile markers and valid credentials, slugs in alphabetical order.
     static func discover(home: URL = homeDirectory,
                          fileManager: FileManager = .default,
-                         hasCredential: (AntigravityProfile) -> Bool = { _ in true }) -> [AntigravityProfile] {
+                         hasCredential: (AntigravityProfile) -> Bool = AntigravityCredentials.hasCredential) -> [AntigravityProfile] {
         let geminiDir = home.appendingPathComponent(".gemini")
         let names = (try? fileManager.contentsOfDirectory(atPath: geminiDir.path)) ?? []
         let extras = names.compactMap { name -> AntigravityProfile? in
@@ -47,7 +47,7 @@ struct AntigravityProfile: Equatable, Hashable {
     }
 
     /// `antigravity-work` -> `work`; anything else -> nil. The bare `antigravity` is
-    /// the default and is handled separately. Internal flavours (`ide`, `cli`, `backup`)
+    /// the default and is handled separately. Internal flavours (`ide`, `cli`, `backup`, `api`)
     /// are ignored unless explicit.
     static func slug(fromDirectoryName name: String) -> String? {
         let prefix = directoryPrefix + "-"
@@ -62,10 +62,7 @@ struct AntigravityProfile: Equatable, Hashable {
         "oauth_creds.json",
         "credentials.json",
         "brain",
-        "settings.json",
-        "config.json",
-        "agent.db",
-        "state"
+        "agent.db"
     ]
 
     static func isProfileDirectory(_ url: URL, fileManager: FileManager = .default) -> Bool {
@@ -79,20 +76,20 @@ struct AntigravityProfile: Equatable, Hashable {
 
     // MARK: - Identity
 
-    /// `gemini` for the default, `gemini-<slug>` for the rest.
-    var id: String { slug.map { "\(Self.defaultID)-\($0)" } ?? Self.defaultID }
+    /// `gemini` for the default, `antigravity-<slug>` for the rest.
+    var id: String { slug.map { "\(Self.directoryPrefix)-\($0)" } ?? Self.defaultID }
 
     /// `Antigravity`, or `Antigravity (work)`.
     var displayName: String { slug.map { "Antigravity (\($0))" } ?? "Antigravity" }
 
     /// Whether a provider id names an Antigravity profile, default or otherwise.
     static func isAntigravity(providerID: String) -> Bool {
-        providerID == defaultID || providerID.hasPrefix(defaultID + "-")
+        providerID == defaultID || (providerID.hasPrefix(directoryPrefix + "-") && slug(fromProviderID: providerID) != nil)
     }
 
     /// The slug back out of a provider id.
     static func slug(fromProviderID id: String) -> String? {
-        let prefix = defaultID + "-"
+        let prefix = directoryPrefix + "-"
         guard id.hasPrefix(prefix) else { return nil }
         let slug = String(id.dropFirst(prefix.count))
         return slug.isEmpty ? nil : slug
@@ -110,11 +107,15 @@ struct AntigravityProfile: Equatable, Hashable {
         return path.hasPrefix(home + "/") ? "~" + path.dropFirst(home.count) : path
     }
 
-    var sourceName: String { slug == nil ? "Antigravity" : "Antigravity in \(displayPath)" }
+    var sourceName: String {
+        guard let slug else { return "Antigravity" }
+        return L10n.t("Antigravity in \(displayPath)")
+    }
 
     var signInRoute: SignInRoute {
-        slug == nil
-            ? .openApp(bundleID: "com.google.antigravity", name: "Antigravity")
-            : .guidance("Sign in to Antigravity in \(displayPath) to read your usage.")
+        guard let slug else {
+            return .openApp(bundleID: "com.google.antigravity", name: "Antigravity")
+        }
+        return .guidance(L10n.t("Sign in to Antigravity in ~/.gemini/antigravity-\(slug) to read your usage"))
     }
 }

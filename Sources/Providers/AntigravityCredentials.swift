@@ -81,13 +81,19 @@ struct AntigravityCredentials {
         return false
     }
 
-    static func isSignedIn(for profile: AntigravityProfile) -> Bool {
+    static func hasCredential(for profile: AntigravityProfile) -> Bool {
         if profile.slug == nil { return isSignedIn() }
         if FileManager.default.fileExists(atPath: profile.authURL.path) { return true }
         if KeychainItem.modifiedAt(service: profile.keychainService, account: profile.keychainAccount) != nil { return true }
         let dbPath = profile.configDirectory.appendingPathComponent("agent.db").path
-        if FileManager.default.fileExists(atPath: dbPath) { return true }
+        if FileManager.default.fileExists(atPath: dbPath), readOMPCredentials(at: URL(fileURLWithPath: dbPath)) != nil {
+            return true
+        }
         return false
+    }
+
+    static func isSignedIn(for profile: AntigravityProfile) -> Bool {
+        hasCredential(for: profile)
     }
 
     /// Antigravity stores through Go's `keyring` package, which base64-encodes
