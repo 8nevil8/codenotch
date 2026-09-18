@@ -366,9 +366,13 @@ fn begin_move(app: AppHandle, depth: f64, length: f64) {
         };
         // The overlay is at the monitor's own scale; the notch page is that scale times its size
         let size = ui_scale(&app);
+        // Every figure here is the work area's, to match the overlay window and the notch itself:
+        // the zone drawn on the taskbar's edge has to sit where the notch will, and the edge the
+        // pointer picks has to be read against the same rectangle the zones are drawn in.
+        let (ax, ay, aw, ah) = mon.area();
         let mut zones = dropzones::Zones {
-            w: mon.w as f64 / mon.scale,
-            h: mon.h as f64 / mon.scale,
+            w: aw as f64 / mon.scale,
+            h: ah as f64 / mon.scale,
             depth: depth * size,
             length: length * size,
             target: from.clone(),
@@ -377,7 +381,7 @@ fn begin_move(app: AppHandle, depth: f64, length: f64) {
         let mut target = from.clone();
         while left_button_down() {
             if let Ok(cur) = app.cursor_position() {
-                let next = edge_at(cur.x - mon.x as f64, cur.y - mon.y as f64, mon.w as f64, mon.h as f64);
+                let next = edge_at(cur.x - ax as f64, cur.y - ay as f64, aw as f64, ah as f64);
                 if next != target {
                     target = next.to_string();
                     zones.target = target.clone();

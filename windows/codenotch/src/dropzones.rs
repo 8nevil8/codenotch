@@ -35,10 +35,13 @@ pub fn show(app: &AppHandle, screen: &crate::Screen, zones: &Zones) {
         let _ = w.show();
         return;
     }
+    // The work area, not the monitor: the zones are welded to this window's own edges, so sizing it
+    // to where the notch may actually land is what keeps a zone's promise true on the taskbar's edge.
+    let (ax, ay, aw, ah) = screen.area();
     let builder = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("dropzones.html".into()))
         .title("Codenotch drop zones")
-        .position(screen.x as f64, screen.y as f64)
-        .inner_size(screen.w as f64 / screen.scale, screen.h as f64 / screen.scale)
+        .position(ax as f64, ay as f64)
+        .inner_size(aw as f64 / screen.scale, ah as f64 / screen.scale)
         .decorations(false)
         .transparent(true)
         .shadow(false)
