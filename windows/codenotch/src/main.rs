@@ -242,21 +242,19 @@ pub fn place_notch(app: &AppHandle) {
         let insets = work_insets(&mon, placed.0, placed.1, placed.2, placed.3).map(|v| v as f64 / css);
         *NOTCH_INSETS.lock().unwrap() = insets;
         let _ = w.emit("notch_insets", insets);
-        // Placement log line: the first thing to check when the notch is not visible
-        let log = config::config_path().with_file_name("run.log");
-        let _ = std::fs::write(
-            log,
-            format!(
-                "notch placed build={BUILD}: edge={edge} pos=({x},{y}) size=({ww}x{wh}) inner={:?} win_scale={scale} mon_scale={ms} notch_size={size} monitor={:?}=({},{} {}x{}) work={:?} card_insets_css={insets:?}\n",
-                w.inner_size().map(|s| (s.width, s.height)).unwrap_or((0, 0)),
-                mon.name,
-                mon.x,
-                mon.y,
-                mon.w,
-                mon.h,
-                mon.work
-            ),
-        );
+        // Placement log line: the first thing to check when the notch is not visible. Appended, not
+        // overwritten (#240) — place_notch runs after every drag as well as at startup, and a
+        // truncating write wiped the rest of the session's diagnostic trail on every drag.
+        applog(&format!(
+            "notch placed build={BUILD}: edge={edge} pos=({x},{y}) size=({ww}x{wh}) inner={:?} win_scale={scale} mon_scale={ms} notch_size={size} monitor={:?}=({},{} {}x{}) work={:?} card_insets_css={insets:?}",
+            w.inner_size().map(|s| (s.width, s.height)).unwrap_or((0, 0)),
+            mon.name,
+            mon.x,
+            mon.y,
+            mon.w,
+            mon.h,
+            mon.work
+        ));
     }
 }
 
@@ -574,10 +572,21 @@ fn zoom_notch(w: &tauri::WebviewWindow, monitor_scale: f64, size: f64) {
     }
 }
 
+/// run.log never grows past this. The placement line used to rewrite the file on every drag,
+/// which was the only thing that ever emptied it; appended instead, it needs a bound of its own.
+const RUN_LOG_MAX_BYTES: u64 = 1024 * 1024;
+
 pub fn applog(line: &str) {
     use std::io::Write;
     let log = config::config_path().with_file_name("run.log");
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(log) {
+    // Past the cap the log starts again rather than growing for as long as the app runs.
+    let full = std::fs::metadata(&log).map(|m| m.len() > RUN_LOG_MAX_BYTES).unwrap_or(false);
+    let opened = if full {
+        std::fs::File::create(&log)
+    } else {
+        std::fs::OpenOptions::new().create(true).append(true).open(&log)
+    };
+    if let Ok(mut f) = opened {
         let _ = writeln!(f, "{line}");
     }
 }
