@@ -1287,7 +1287,7 @@ it and then notice when the answer changes.
       Dock at the bottom is nowhere near a right-edge notch, and centring on the
       visible area would slide that notch up and down every time the Dock hid
       itself, for no reason anyone could see.
-- [x] **Superseded by `bbc436f`: every edge now anchors to `frame`.** Pinning to
+- [x] **Superseded by `2913f68`: every edge now anchors to `frame`.** Pinning to
       `visibleFrame` meant the notch jumped whenever the Dock or menu bar
       appeared, which moved a position the user had chosen.
       `NotchGeometry.panelFrame` reads `frameValue` on all four edges;
