@@ -11,12 +11,13 @@ struct PluginRegistryTests {
     }
 
     @discardableResult
-    private func writePlugin(_ id: String, in root: URL, displayName: String = "A Plugin") throws -> URL {
+    private func writePlugin(_ id: String, in root: URL, displayName: String = "A Plugin",
+                             execPath: String = "/bin/sh") throws -> URL {
         let directory = root.appendingPathComponent(id, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let manifest = #"""
         {"schema": 1, "id": "\#(id)", "displayName": "\#(displayName)", "version": "1",
-         "exec": {"path": "/bin/sh", "args": ["snapshot"]},
+         "exec": {"path": "\#(execPath)", "args": ["snapshot"]},
          "glyph": {"image": "glyph.png", "opticalScale": 0.9}}
         """#
         try manifest.write(to: directory.appendingPathComponent("plugin.json"),
@@ -82,6 +83,86 @@ struct PluginRegistryTests {
             at: root.appendingPathComponent("not-a-plugin", isDirectory: true),
             withIntermediateDirectories: true)
         #expect(PluginRegistry(directory: root, builtInIDs: { [] }).scan().isEmpty)
+    }
+
+    // MARK: - Folder trust
+
+    @Test func scanRefusesAnUntrustedRoot() throws {
+        let root = try makeRoot()
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
+            try? FileManager.default.removeItem(at: root)
+        }
+        try writePlugin("codemie-budget", in: root)
+        try FileManager.default.setAttributes([.posixPermissions: 0o777], ofItemAtPath: root.path)
+        #expect(PluginRegistry(directory: root, builtInIDs: { [] }).scan().isEmpty)
+    }
+
+    @Test func scanSkipsASymlinkedPluginDirectory() throws {
+        let root = try makeRoot()
+        // The genuine directory stays outside the scanned root: inside it would
+        // be a plugin in its own right, symlink or no symlink.
+        let outside = try makeRoot()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: outside)
+        }
+        let real = try writePlugin("codemie-budget", in: outside)
+        try FileManager.default.createSymbolicLink(
+            at: root.appendingPathComponent("codemie-budget", isDirectory: true),
+            withDestinationURL: real)
+        #expect(PluginRegistry(directory: root, builtInIDs: { [] }).scan().isEmpty)
+    }
+
+    @Test func scanSkipsAGroupWritableManifest() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = try writePlugin("codemie-budget", in: root)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o664],
+            ofItemAtPath: directory.appendingPathComponent("plugin.json").path)
+        #expect(PluginRegistry(directory: root, builtInIDs: { [] }).scan().isEmpty)
+    }
+
+    // MARK: - Content hash
+
+    @Test func theContentHashCoversTheManifestAndTheExecutable() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let script = root.appendingPathComponent("tool.sh")
+        try "#!/bin/sh\necho one\n".write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        try writePlugin("codemie-budget", in: root, execPath: script.path)
+        let registry = PluginRegistry(directory: root, builtInIDs: { [] })
+        let first = registry.scan().first?.contentHash
+
+        try "#!/bin/sh\necho two\n".write(to: script, atomically: true, encoding: .utf8)
+        let second = registry.scan().first?.contentHash
+
+        #expect(first != nil)
+        #expect(first != second, "a swapped executable must change the pinned hash")
+    }
+
+    @Test func anExecutableSwapReportsAReregistration() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let script = root.appendingPathComponent("tool.sh")
+        try "#!/bin/sh\necho one\n".write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        try writePlugin("codemie-budget", in: root, execPath: script.path)
+        let registry = PluginRegistry(directory: root, builtInIDs: { [] })
+        registry.seed(registry.scan())
+
+        let changes = ChangeLog()
+        registry.onChange = { change in changes.record(change) }
+        registry.start()
+        defer { registry.stop() }
+
+        try "#!/bin/sh\necho two\n".write(to: script, atomically: true, encoding: .utf8)
+        #expect(await waitFor {
+            changes.removedIDs().contains("codemie-budget")
+                && changes.addedIDs().contains("codemie-budget")
+        })
     }
 
     // MARK: - Watching
