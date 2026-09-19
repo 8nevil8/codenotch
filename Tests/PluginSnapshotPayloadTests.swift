@@ -100,15 +100,16 @@ struct PluginSnapshotPayloadTests {
         #expect(decoded.providerAccount() == nil)
     }
 
-    @Test func anHTTPSManageURLSurvives() throws {
-        let decoded = try payload(#"""
-        {"account": {"manageURL": "https://example.com/usage"}, "windows": []}
-        """#)
-        #expect(decoded.providerAccount()?.manageURL == URL(string: "https://example.com/usage"))
+    @Test(arguments: ["https://example.com/usage", "HTTPS://example.com/usage"])
+    func anHTTPSManageURLSurvives(url: String) throws {
+        // URL schemes are case-insensitive; an uppercase HTTPS must survive too.
+        let decoded = try payload(#"{"account": {"manageURL": "\#(url)"}, "windows": []}"#)
+        #expect(decoded.providerAccount()?.manageURL == URL(string: url))
     }
 
     @Test(arguments: ["http://example.com/usage", "file:///etc/passwd",
-                      "javascript:alert(1)", "codenotch://internal"])
+                      "javascript:alert(1)", "codenotch://internal",
+                      "example.com/usage", "//example.com/usage"])
     func aNonHTTPSManageURLIsDropped(url: String) throws {
         let decoded = try payload(#"{"account": {"manageURL": "\#(url)"}, "windows": []}"#)
         #expect(decoded.providerAccount()?.manageURL == nil)
