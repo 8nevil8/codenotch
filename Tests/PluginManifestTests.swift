@@ -13,7 +13,9 @@ struct PluginManifestTests {
     private func manifestJSON(
         id: String = "codemie-budget",
         schema: Int = 1,
+        displayName: String = "CodeMie Budget",
         execPath: String = "/bin/sh",
+        signInRun: String? = #""signIn": {"guidance": "Run codemie profile login.", "run": ["/bin/sh", "-l"]},"#,
         glyph: String? = nil
     ) -> Data {
         var glyphSection = ""
@@ -24,11 +26,11 @@ struct PluginManifestTests {
         {
             "schema": \#(schema),
             "id": "\#(id)",
-            "displayName": "CodeMie Budget",
+            "displayName": "\#(displayName)",
             "version": "0.1.0",
             "exec": {"path": "\#(execPath)", "args": ["snapshot"], "timeoutSeconds": 12},
             \#(glyphSection)
-            "signIn": {"guidance": "Run codemie profile login.", "run": ["/usr/local/bin/codemie", "profile", "login"]},
+            \#(signInRun ?? "")
             "activity": {"type": "claudeSessions", "configDir": "~/.claude"}
         }
         """#.utf8)
@@ -52,7 +54,7 @@ struct PluginManifestTests {
         #expect(manifest.glyph?.image == "glyph.png")
         #expect(manifest.glyph?.opticalScale == 0.95)
         #expect(manifest.signIn?.guidance == "Run codemie profile login.")
-        #expect(manifest.signIn?.run == ["/usr/local/bin/codemie", "profile", "login"])
+        #expect(manifest.signIn?.run == ["/bin/sh", "-l"])
         #expect(manifest.activity?.type == "claudeSessions")
     }
 
@@ -173,6 +175,131 @@ struct PluginManifestTests {
         """#.utf8)
         let manifest = try decode(data)
         #expect(throws: PluginManifest.ValidationError.unknownActivity("watchDirectory")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    // MARK: - Display name
+
+    @Test func rejectsAnEmptyDisplayName() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = try decode(manifestJSON(displayName: "   "))
+        #expect(throws: PluginManifest.ValidationError.malformedDisplayName("   ")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsATooLongDisplayName() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let name = String(repeating: "a", count: 41)
+        let manifest = try decode(manifestJSON(displayName: name))
+        #expect(throws: PluginManifest.ValidationError.malformedDisplayName(name)) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsADisplayNameWithControlCharacters() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // A raw BEL would be invalid JSON; the `\u0007` escape decodes to it.
+        let manifest = try decode(manifestJSON(displayName: #"Code\u0007Mie"#))
+        #expect(throws: PluginManifest.ValidationError.malformedDisplayName("Code\u{7}Mie")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsADisplayNameImpersonatingABuiltIn() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = try decode(manifestJSON(displayName: "claude"))
+        #expect(throws: PluginManifest.ValidationError.impersonatesBuiltIn("claude")) {
+            try manifest.validated(builtInIDs: [], builtInDisplayNames: ["Claude"],
+                                   pluginDirectory: directory)
+        }
+    }
+
+    // MARK: - Glyph containment
+
+    @Test func rejectsAGlyphThatEscapesThePluginDirectory() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = try decode(manifestJSON(glyph: "../outside.png"))
+        #expect(throws: PluginManifest.ValidationError.glyphEscapesPluginDirectory("../outside.png")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsAGlyphSymlinkThatEscapesThePluginDirectory() throws {
+        let root = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let outside = root.appendingPathComponent("outside.png")
+        try Data([0x89, 0x50, 0x4E, 0x47]).write(to: outside)
+        let directory = root.appendingPathComponent("plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: directory.appendingPathComponent("glyph.png"),
+            withDestinationURL: outside)
+        let manifest = try decode(manifestJSON(glyph: "glyph.png"))
+        #expect(throws: PluginManifest.ValidationError.glyphEscapesPluginDirectory("glyph.png")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    // MARK: - signIn.run
+
+    @Test func rejectsARelativeSignInExecutable() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = try decode(manifestJSON(
+            signInRun: #""signIn": {"guidance": "g", "run": ["codemie", "login"]},"#))
+        #expect(throws: PluginManifest.ValidationError.signInNotAbsolute("codemie")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsAMissingSignInExecutable() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = try decode(manifestJSON(
+            signInRun: #""signIn": {"guidance": "g", "run": ["/no/such/tool"]},"#))
+        #expect(throws: PluginManifest.ValidationError.signInMissing("/no/such/tool")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsANonExecutableSignInExecutable() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("tool")
+        try "echo hi".write(to: file, atomically: true, encoding: .utf8)
+        let manifest = try decode(manifestJSON(
+            signInRun: "\"signIn\": {\"guidance\": \"g\", \"run\": [\"\(file.path)\"]},"))
+        #expect(throws: PluginManifest.ValidationError.signInNotExecutable(file.path)) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    // MARK: - Executable trust
+
+    @Test func rejectsAGroupWritableExec() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("tool")
+        try "#!/bin/sh\n".write(to: file, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o775], ofItemAtPath: file.path)
+        let manifest = try decode(manifestJSON(execPath: file.path))
+        #expect(throws: PluginManifest.ValidationError.execUntrusted(file.path)) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func acceptsASystemExec() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = try decode(manifestJSON(execPath: "/bin/sh"))
+        #expect(throws: Never.self) {
             try manifest.validated(builtInIDs: [], pluginDirectory: directory)
         }
     }
