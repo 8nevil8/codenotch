@@ -143,6 +143,42 @@ struct PluginRegistryTests {
         #expect(first != second, "a swapped executable must change the pinned hash")
     }
 
+    @Test func theContentHashCoversTheManifestBytes() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = try writePlugin("codemie-budget", in: root)
+        let registry = PluginRegistry(directory: root, builtInIDs: { [] })
+        let first = registry.scan().first?.contentHash
+
+        // Same executable, same directory: only the manifest bytes change, so
+        // the pinned hash must too.
+        let manifestURL = directory.appendingPathComponent("plugin.json")
+        let bumped = try String(contentsOf: manifestURL, encoding: .utf8)
+            .replacingOccurrences(of: "\"version\": \"1\"", with: "\"version\": \"2\"")
+        try bumped.write(to: manifestURL, atomically: true, encoding: .utf8)
+        let second = registry.scan().first?.contentHash
+
+        #expect(first != nil)
+        #expect(second != nil)
+        #expect(first != second, "a manifest edit must change the pinned hash")
+    }
+
+    @Test func scanSkipsAPluginWhoseExecutableIsUnreadable() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let script = root.appendingPathComponent("tool.sh")
+        try "#!/bin/sh\necho one\n".write(to: script, atomically: true, encoding: .utf8)
+        // Execute-only and user-owned: passes validation's executable and
+        // trust checks, but `Data(contentsOf:)` fails — and an unhashable
+        // binary must not register.
+        try FileManager.default.setAttributes([.posixPermissions: 0o111], ofItemAtPath: script.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        }
+        try writePlugin("codemie-budget", in: root, execPath: script.path)
+        #expect(PluginRegistry(directory: root, builtInIDs: { [] }).scan().isEmpty)
+    }
+
     @Test func anExecutableSwapReportsAReregistration() async throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
