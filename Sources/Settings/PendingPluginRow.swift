@@ -3,7 +3,9 @@ import SwiftUI
 
 /// A plugin that asked to run but has not been approved. Shows exactly what
 /// would execute — path, arguments, and the SHA-256 the approval will pin —
-/// because "Enable" is a trust decision, not a toggle.
+/// and offers to open the manifest and the plugin folder, because "Enable" is
+/// a trust decision, not a toggle: the user should be able to read what they
+/// are trusting before they trust it.
 struct PendingPluginRow: View {
     let plugin: PluginCoordinator.PendingPlugin
     let approve: () -> Void
@@ -17,6 +19,26 @@ struct PendingPluginRow: View {
                     .foregroundStyle(.secondary)
                 PluginBadge()
                 Spacer(minLength: 8)
+                // Read-only looks before the decision: the manifest in the
+                // default editor, the folder in Finder. Neither runs anything.
+                Button {
+                    NSWorkspace.shared.open(plugin.manifestURL)
+                } label: {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(SettingsIconButtonStyle())
+                .accessibilityLabel(L10n.t("View manifest"))
+                .help(L10n.t("Open plugin.json, the manifest this approval pins."))
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([plugin.manifestURL])
+                } label: {
+                    Image(systemName: "folder")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(SettingsIconButtonStyle())
+                .accessibilityLabel(L10n.t("Reveal in Finder"))
+                .help(L10n.t("Show the plugin folder in Finder."))
                 Button(L10n.t("Enable…"), action: approve)
                     .controlSize(.small)
                     .help(L10n.t("Trust this exact build of the plugin and connect it. Any change to its manifest or executable asks again."))
