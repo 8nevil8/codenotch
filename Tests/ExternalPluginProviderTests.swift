@@ -225,4 +225,15 @@ struct ExternalPluginProviderTests {
             Issue.record("wrong error: \(error)")
         }
     }
+
+    @Test func aGrandchildHoldingThePipeCannotHangTheFetch() async throws {
+        // sh exits at once; the orphaned grandchild holds the pipe write end.
+        // Only the bounded drain wait throws timedOut instead of hanging.
+        let manifest = spawnManifest(args: ["-c", "sleep 30 &"])
+        let started = Date()
+        await #expect(throws: UsageProviderError.timedOut) {
+            _ = try await ExternalPluginProvider.spawn(manifest: manifest)
+        }
+        #expect(Date().timeIntervalSince(started) < 10)
+    }
 }
