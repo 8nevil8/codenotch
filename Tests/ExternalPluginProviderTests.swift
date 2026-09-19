@@ -159,4 +159,70 @@ struct ExternalPluginProviderTests {
             Issue.record("wrong error: \(error)")
         }
     }
+
+    // MARK: - Spawning
+
+    private func spawnManifest(
+        args: [String],
+        timeoutSeconds: TimeInterval? = nil
+    ) -> PluginManifest {
+        PluginManifest(
+            schema: 1, id: "codemie-budget", displayName: "CodeMie Budget", version: "0.1.0",
+            exec: PluginManifest.Exec(path: "/bin/sh", args: args, timeoutSeconds: timeoutSeconds),
+            glyph: nil, signIn: nil, activity: nil)
+    }
+
+    @Test func theChildGetsTheAllowlistedEnvironment() async throws {
+        // Deterministic: the allowlist's PATH is a constant, so echoing it proves
+        // both that it was set and that the inherited one was not used.
+        let manifest = spawnManifest(args: ["-c", "printf %s \"$PATH\""])
+        let result = try await ExternalPluginProvider.spawn(manifest: manifest)
+        #expect(String(data: result.stdout, encoding: .utf8)
+                == "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin")
+    }
+
+    @Test func theTimeoutIsClampedToTheCeiling() {
+        #expect(ExternalPluginProvider.effectiveTimeout(
+            for: spawnManifest(args: [], timeoutSeconds: 9999)) == 30)
+        #expect(ExternalPluginProvider.effectiveTimeout(
+            for: spawnManifest(args: [], timeoutSeconds: 5)) == 5)
+    }
+
+    @Test func aPluginThatIgnoresSIGTERMIsKilled() async throws {
+        // trap "" TERM swallows the watchdog's SIGTERM; only the SIGKILL
+        // escalation ends this child.
+        let manifest = spawnManifest(args: ["-c", "trap '' TERM; sleep 60"],
+                                     timeoutSeconds: 1)
+        let started = Date()
+        await #expect(throws: UsageProviderError.timedOut) {
+            _ = try await ExternalPluginProvider.spawn(manifest: manifest)
+        }
+        #expect(Date().timeIntervalSince(started) < 10,
+                "SIGKILL escalation should end a SIGTERM-immune child within seconds")
+    }
+
+    @Test func stdoutBeyondTheCapIsABadResponse() async {
+        let manifest = spawnManifest(
+            args: ["-c", "head -c 2000000 /dev/zero | tr '\\0' 'a'"])
+        await #expect(throws: UsageProviderError.badResponse(status: 0)) {
+            _ = try await ExternalPluginProvider.spawn(manifest: manifest)
+        }
+    }
+
+    @Test func stderrBeyondTheCapIsAnError() async {
+        let manifest = spawnManifest(
+            args: ["-c", "head -c 100000 /dev/zero | tr '\\0' 'a' 1>&2"])
+        do {
+            _ = try await ExternalPluginProvider.spawn(manifest: manifest)
+            Issue.record("expected a throw")
+        } catch let error as PluginExecError {
+            guard case .failed(let why) = error else {
+                Issue.record("wrong case: \(error)")
+                return
+            }
+            #expect(why.contains("stderr"))
+        } catch {
+            Issue.record("wrong error: \(error)")
+        }
+    }
 }
