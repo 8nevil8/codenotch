@@ -97,11 +97,15 @@ struct PluginSnapshotPayload: Decodable, Sendable {
 
     func providerAccount() -> ProviderAccount? {
         guard let account else { return nil }
+        // The row hands this straight to NSWorkspace.open: https or nothing.
+        let manageURL = account.manageURL.flatMap {
+            $0.scheme?.lowercased() == "https" ? $0 : nil
+        }
         return ProviderAccount(
             label: account.label,
             plan: account.plan,
             source: account.source ?? "plugin",
-            manageURL: account.manageURL
+            manageURL: manageURL
         )
     }
 }
