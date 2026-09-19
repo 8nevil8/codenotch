@@ -98,8 +98,8 @@ struct AntigravityProfile: Equatable, Hashable {
     var authURL: URL { configDirectory.appendingPathComponent("oauth_creds.json") }
     var brainDirectory: URL { configDirectory.appendingPathComponent("brain") }
 
-    var keychainService: String { "gemini" }
-    var keychainAccount: String { slug.map { "antigravity-\($0)" } ?? "antigravity" }
+    var keychainService: String? { slug == nil ? "gemini" : nil }
+    var keychainAccount: String? { slug == nil ? "antigravity" : nil }
 
     var displayPath: String {
         let home = NSHomeDirectory()

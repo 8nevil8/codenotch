@@ -49,14 +49,29 @@ struct AntigravityCredentials {
         cache(for: profile).forget()
     }
 
-    /// Granted by "Allow access…" alone — see `PromptPermission`.
-    private static let prompt = PromptPermission()
+    private static let profilePromptsLock = NSLock()
+    private static var profilePrompts: [String: PromptPermission] = [:]
+
+    private static func prompt(for profileID: String) -> PromptPermission {
+        profilePromptsLock.lock()
+        defer { profilePromptsLock.unlock() }
+        if let existing = profilePrompts[profileID] {
+            return existing
+        }
+        let newPrompt = PromptPermission()
+        profilePrompts[profileID] = newPrompt
+        return newPrompt
+    }
 
     /// A person asked macOS for this login again: the next read may show the
     /// dialogue. `forgetCached` grants nothing, because it is not only a click.
     static func askAgain() {
-        prompt.grant()
-        cache.forget()
+        askAgain(for: .default())
+    }
+
+    static func askAgain(for profile: AntigravityProfile) {
+        prompt(for: profile.id).grant()
+        cache(for: profile).forget()
     }
 
     /// Stands in for the keychain in tests, which have none to read.
@@ -84,7 +99,6 @@ struct AntigravityCredentials {
     static func hasCredential(for profile: AntigravityProfile) -> Bool {
         if profile.slug == nil { return isSignedIn() }
         if FileManager.default.fileExists(atPath: profile.authURL.path) { return true }
-        if KeychainItem.modifiedAt(service: profile.keychainService, account: profile.keychainAccount) != nil { return true }
         let dbPath = profile.configDirectory.appendingPathComponent("agent.db").path
         if FileManager.default.fileExists(atPath: dbPath), readOMPCredentials(at: URL(fileURLWithPath: dbPath)) != nil {
             return true
@@ -120,11 +134,10 @@ struct AntigravityCredentials {
         if profile.slug == nil { return try load() }
         return try cache(for: profile).value(
             itemModifiedAt: {
-                let keychainMod = KeychainItem.modifiedAt(service: profile.keychainService, account: profile.keychainAccount)
                 let jsonMod = (try? FileManager.default.attributesOfItem(atPath: profile.authURL.path))?[.modificationDate] as? Date
                 let agentDB = profile.configDirectory.appendingPathComponent("agent.db").path
                 let dbMod = (try? FileManager.default.attributesOfItem(atPath: agentDB))?[.modificationDate] as? Date
-                return [keychainMod, jsonMod, dbMod].compactMap { $0 }.max()
+                return [jsonMod, dbMod].compactMap { $0 }.max()
             },
             reload: { try read(for: profile) }
         )
@@ -136,36 +149,14 @@ struct AntigravityCredentials {
             return jsonCreds
         }
 
-        // 2. Check profile-specific keychain account
-        let account = profile.keychainAccount
-        let service = profile.keychainService
-        let interactive = prompt.take()
-        let (status, data) = readKeychainForTesting?(interactive) ?? KeychainSecret.read(
-            query: [
-                kSecClass: kSecClassGenericPassword,
-                kSecAttrService: service,
-                kSecAttrAccount: account,
-                kSecReturnData: true,
-                kSecMatchLimit: kSecMatchLimitOne
-            ],
-            interactive: interactive,
-            rescue: (service: service, account: account)
-        )
-        if status == errSecSuccess, let data, let decoded = decode(data) {
-            return decoded
-        }
-
-        // 3. Check profile-specific agent.db
+        // 2. Check profile-specific agent.db
         let agentDB = profile.configDirectory.appendingPathComponent("agent.db")
         if let ompCreds = readOMPCredentials(at: agentDB) {
             return ompCreds
         }
 
-        Log.usage.error("antigravity credentials read failed for \(profile.id, privacy: .public): OSStatus \(status)")
-        if ClaudeCredentials.wasTransient(status) { throw UsageProviderError.credentialExpired }
-        throw ClaudeCredentials.wasRefused(status)
-            ? UsageProviderError.accessDenied
-            : UsageProviderError.needsAuth
+        Log.usage.error("antigravity credentials read failed for \(profile.id, privacy: .public)")
+        throw UsageProviderError.needsAuth
     }
 
     private static func read() throws -> AntigravityCredentials {
@@ -178,7 +169,7 @@ struct AntigravityCredentials {
         // five-minute retry came round — for a token Antigravity itself had
         // long stopped refreshing. A refusal is retried through the security
         // tool under the item's own account, which is not this user's.
-        let interactive = prompt.take()
+        let interactive = prompt(for: AntigravityProfile.defaultID).take()
         let (status, data) = readKeychainForTesting?(interactive) ?? KeychainSecret.read(
             query: [
                 kSecClass: kSecClassGenericPassword,

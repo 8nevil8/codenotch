@@ -859,6 +859,18 @@
             "state": "translated",
             "value": "在 ~/.gemini/antigravity-%@ 登录 Antigravity 以读取用量"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 ~/.gemini/antigravity-%@ 登入 Antigravity 以讀取用量"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Увійдіть в Antigravity в ~/.gemini/antigravity-%@, щоб бачити використання"
+          }
         }
       }
     },
@@ -895,7 +907,19 @@
             "value": "Antigravity в %@"
           }
         },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Antigravity в %@"
+          }
+        },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 中的 Antigravity"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "%@ 中的 Antigravity"

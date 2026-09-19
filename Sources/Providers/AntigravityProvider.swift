@@ -70,7 +70,7 @@ actor AntigravityProvider: UsageProvider {
     /// Reached only from "Allow access…", so it may let the next read prompt.
     nonisolated func forgetCachedCredential() {
         AntigravityCredentials.forgetCached(for: profile)
-        AntigravityCredentials.askAgain()
+        AntigravityCredentials.askAgain(for: profile)
     }
 
     nonisolated func account() -> ProviderAccount? {

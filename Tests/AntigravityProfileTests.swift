@@ -47,8 +47,8 @@ final class AntigravityProfileTests: XCTestCase {
         XCTAssertEqual(profile.displayName, "Antigravity (work)")
         XCTAssertEqual(profile.authURL.path, "/Users/test/.gemini/antigravity-work/oauth_creds.json")
         XCTAssertEqual(profile.brainDirectory.path, "/Users/test/.gemini/antigravity-work/brain")
-        XCTAssertEqual(profile.keychainService, "gemini")
-        XCTAssertEqual(profile.keychainAccount, "antigravity-work")
+        XCTAssertNil(profile.keychainService)
+        XCTAssertNil(profile.keychainAccount)
         XCTAssertEqual(profile.sourceName, L10n.t("Antigravity in \(profile.displayPath)"))
         XCTAssertEqual(AntigravityProvider(profile: profile).signInRoute,
                        .guidance(L10n.t("Sign in to Antigravity in ~/.gemini/antigravity-work to read your usage")))
@@ -206,10 +206,8 @@ final class AntigravityProfileTests: XCTestCase {
     }
 
     func testForgetCachedCredentialGrantsPromptPermission() {
-        let home = URL(fileURLWithPath: "/Users/test")
-        let dir = home.appendingPathComponent(".gemini/antigravity-work")
-        let workProfile = AntigravityProfile(slug: "work", configDirectory: dir)
-        let provider = AntigravityProvider(profile: workProfile)
+        let defaultProfile = AntigravityProfile.default()
+        let provider = AntigravityProvider(profile: defaultProfile)
 
         var promptedInteractive: Bool?
         AntigravityCredentials.readKeychainForTesting = { interactive in
@@ -219,8 +217,33 @@ final class AntigravityProfileTests: XCTestCase {
         addTeardownBlock { AntigravityCredentials.readKeychainForTesting = nil }
 
         provider.forgetCachedCredential()
-        _ = try? AntigravityCredentials.load(for: workProfile)
+        _ = try? AntigravityCredentials.load(for: defaultProfile)
 
-        XCTAssertEqual(promptedInteractive, true, "Allow access... must grant interactive permission for extra profile")
+        XCTAssertEqual(promptedInteractive, true, "Allow access... must grant interactive permission for default profile")
+    }
+
+    func testPromptPermissionIsIsolatedPerProfile() {
+        let defaultProfile = AntigravityProfile.default()
+        let workProfile = AntigravityProfile(slug: "work", configDirectory: URL(fileURLWithPath: "/tmp/antigravity-work"))
+        let defaultProvider = AntigravityProvider(profile: defaultProfile)
+        let workProvider = AntigravityProvider(profile: workProfile)
+
+        var promptedInteractive: Bool?
+        AntigravityCredentials.readKeychainForTesting = { interactive in
+            promptedInteractive = interactive
+            return (errSecItemNotFound, nil)
+        }
+        addTeardownBlock { AntigravityCredentials.readKeychainForTesting = nil }
+
+        // Extra profile forgetCachedCredential must not grant default profile's keychain prompt
+        AntigravityCredentials.forgetCached(for: defaultProfile)
+        workProvider.forgetCachedCredential()
+        _ = try? AntigravityCredentials.load(for: defaultProfile)
+        XCTAssertEqual(promptedInteractive, false, "Extra profile grant must not grant default profile prompt")
+
+        // Default profile forgetCachedCredential grants default's prompt
+        defaultProvider.forgetCachedCredential()
+        _ = try? AntigravityCredentials.load(for: defaultProfile)
+        XCTAssertEqual(promptedInteractive, true, "Default profile grant must grant default profile prompt")
     }
 }
