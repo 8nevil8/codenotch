@@ -100,6 +100,20 @@ struct PluginSnapshotPayloadTests {
         #expect(decoded.providerAccount() == nil)
     }
 
+    @Test func anHTTPSManageURLSurvives() throws {
+        let decoded = try payload(#"""
+        {"account": {"manageURL": "https://example.com/usage"}, "windows": []}
+        """#)
+        #expect(decoded.providerAccount()?.manageURL == URL(string: "https://example.com/usage"))
+    }
+
+    @Test(arguments: ["http://example.com/usage", "file:///etc/passwd",
+                      "javascript:alert(1)", "codenotch://internal"])
+    func aNonHTTPSManageURLIsDropped(url: String) throws {
+        let decoded = try payload(#"{"account": {"manageURL": "\#(url)"}, "windows": []}"#)
+        #expect(decoded.providerAccount()?.manageURL == nil)
+    }
+
     @Test func externalGlyphSurvivesAnArchiveRoundTrip() throws {
         // The archive persists the glyph enum; one undecodable entry would
         // invalidate every archived reading, so `.external` has to round-trip.
