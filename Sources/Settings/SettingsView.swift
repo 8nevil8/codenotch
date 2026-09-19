@@ -382,6 +382,7 @@ struct SettingsView: View {
     @State private var accounts: [ProviderSummary] = []
     /// The providers the menu bar can show, from the same snapshots it draws.
     @State private var menuBarChoices: [MenuBarChoice] = []
+    @State private var pending: [PluginCoordinator.PendingPlugin] = []
     @State private var displays: [DisplayOption] = []
     @State private var selection: SettingsSection = .accounts
     /// Whether Accounts shows its provider panes. Remembered, so someone who
@@ -735,6 +736,24 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // Pending plugins sit between the two provider groups: they are
+            // neither connected nor safe to treat as ordinary "off" rows,
+            // because enabling one is a trust decision about code.
+            if !pending.isEmpty {
+                Section(L10n.t("Plugins awaiting approval")) {
+                    ForEach(pending) { plugin in
+                        PendingPluginRow(plugin: plugin) {
+                            approvePlugin(plugin.id)
+                            pending = pendingPlugins()
+                        }
+                    }
+                    Text(L10n.t("A plugin is an executable another tool installed. It runs on every refresh as Codenotch — enable only one you installed yourself."))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             // Absent rather than empty when everything is on: a titled, empty
@@ -1293,6 +1312,7 @@ struct SettingsView: View {
 
     private func refreshVisibleState() {
         accounts = providers()
+        pending = pendingPlugins()
         displays = DisplayOption.connected
     }
 
@@ -1662,6 +1682,8 @@ private struct AccountRow: View {
 
                     Text(provider.name)
                         .foregroundStyle(isConnected ? .primary : .secondary)
+
+                    if provider.isPlugin { PluginBadge() }
                 }
                 // Without this only the drawn pixels are grabbable, and the
                 // gaps between the three of them are not.
