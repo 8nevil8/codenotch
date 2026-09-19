@@ -124,4 +124,67 @@ struct PluginCoordinatorTests {
         #expect(!store.knownIDs.contains("codemie-budget"),
                 "the old build's provider must be deregistered while pending")
     }
+
+    @Test func aRemovedPendingPluginLeavesTheList() async throws {
+        let (root, registry, store, preferences, suite) = try makeWorld()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            UserDefaults().removePersistentDomain(forName: suite)
+        }
+        let coordinator = PluginCoordinator(registry: registry, store: store,
+                                            preferences: preferences)
+        coordinator.start()
+        defer { coordinator.stop() }
+
+        let directory = try writePlugin("codemie-budget", in: root)
+        #expect(await waitFor { coordinator.pendingPlugins.map(\.id) == ["codemie-budget"] })
+
+        try FileManager.default.removeItem(at: directory)
+
+        #expect(await waitFor { coordinator.pendingPlugins.isEmpty })
+        #expect(!store.knownIDs.contains("codemie-budget"),
+                "a pending plugin that disappears must never reach the store")
+        #expect(!preferences.isConnected("codemie-budget"))
+    }
+
+    @Test func approvingAnUnknownPluginIsANoOp() async throws {
+        let (root, registry, store, preferences, suite) = try makeWorld()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            UserDefaults().removePersistentDomain(forName: suite)
+        }
+        let coordinator = PluginCoordinator(registry: registry, store: store,
+                                            preferences: preferences)
+        coordinator.start()
+        defer { coordinator.stop() }
+
+        coordinator.approve(pluginID: "nonexistent")
+
+        #expect(coordinator.pendingPlugins.isEmpty)
+        #expect(store.knownIDs.isEmpty)
+        #expect(preferences.approvedHash(forPlugin: "nonexistent") == nil)
+    }
+
+    @Test func bootstrapSeedsPendingWithoutReReporting() async throws {
+        let (root, registry, store, preferences, suite) = try makeWorld()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            UserDefaults().removePersistentDomain(forName: suite)
+        }
+        try writePlugin("codemie-budget", in: root)
+        let coordinator = PluginCoordinator(registry: registry, store: store,
+                                            preferences: preferences)
+        coordinator.bootstrap(approved: [], pending: registry.scan())
+        #expect(coordinator.pendingPlugins.map(\.id) == ["codemie-budget"])
+        coordinator.start()
+        defer { coordinator.stop() }
+
+        // The seeded set must not come back through `onChange`: three seconds
+        // is well past the half-second debounce (same pattern as
+        // PluginRegistryTests.aSeededPluginIsNotReportedAgain).
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
+        #expect(coordinator.pendingPlugins.map(\.id) == ["codemie-budget"])
+        #expect(!store.knownIDs.contains("codemie-budget"))
+        #expect(!preferences.isConnected("codemie-budget"))
+    }
 }

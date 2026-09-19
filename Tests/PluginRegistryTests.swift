@@ -85,6 +85,27 @@ struct PluginRegistryTests {
         #expect(PluginRegistry(directory: root, builtInIDs: { [] }).scan().isEmpty)
     }
 
+    @Test func twoPluginsWithTheSameIDDoNotCrashTheScan() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writePlugin("codemie-budget", in: root)
+        // A second directory declaring the same manifest id. One buggy
+        // installer must not take the process down with it.
+        let twin = root.appendingPathComponent("codemie-budget-twin", isDirectory: true)
+        try FileManager.default.createDirectory(at: twin, withIntermediateDirectories: true)
+        let manifest = #"""
+        {"schema": 1, "id": "codemie-budget", "displayName": "Twin", "version": "1",
+         "exec": {"path": "/bin/sh", "args": ["snapshot"]}}
+        """#
+        try manifest.write(to: twin.appendingPathComponent("plugin.json"),
+                           atomically: true, encoding: .utf8)
+
+        let found = PluginRegistry(directory: root, builtInIDs: { [] }).scan()
+
+        #expect(found.count == 1)
+        #expect(found.first?.manifest.id == "codemie-budget")
+    }
+
     // MARK: - Folder trust
 
     @Test func scanRefusesAnUntrustedRoot() throws {
@@ -237,6 +258,24 @@ struct PluginRegistryTests {
         defer { registry.stop() }
 
         try? await Task.sleep(nanoseconds: 3_000_000_000)
+        #expect(changes.isEmpty())
+    }
+
+    @Test func aStoppedRegistryStaysQuiet() async throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let registry = PluginRegistry(directory: root, builtInIDs: { [] })
+        registry.seed([])
+
+        let changes = ChangeLog()
+        registry.onChange = { change in changes.record(change) }
+        registry.start()
+        registry.stop()
+
+        // A write after `stop` must not be reported: the watches are gone and
+        // a late in-flight event must not arm a rescan behind `stop`'s back.
+        try writePlugin("codemie-budget", in: root)
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
         #expect(changes.isEmpty())
     }
 

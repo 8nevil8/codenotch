@@ -48,6 +48,9 @@ final class PluginRegistry {
     private var source: DispatchSourceFileSystemObject?
     private var pluginSources: [String: DispatchSourceFileSystemObject] = [:]
     private var debounce: DispatchWorkItem?
+    /// Queue-confined. Set by `stop`, cleared by `start`; a late watch event
+    /// after `stop` must not arm a rescan that re-creates watches.
+    private var stopped = false
     private var current: [String: RegisteredPlugin] = [:]
 
     init(directory: URL,
@@ -106,7 +109,7 @@ final class PluginRegistry {
             options: [.skipsHiddenFiles]
         ) else { return [] }
 
-        return entries.compactMap { pluginDirectory in
+        let plugins: [RegisteredPlugin] = entries.compactMap { pluginDirectory in
             guard (try? pluginDirectory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
             else { return nil }
             guard PluginTrust.isTrustedDirectory(pluginDirectory, fileManager: fileManager) else {
@@ -140,6 +143,18 @@ final class PluginRegistry {
                 return nil
             }
         }
+        // Two directories declaring the same manifest id would crash the
+        // dictionaries downstream; one buggy installer is not a process DoS.
+        // The first directory wins, the rest are logged and skipped.
+        var seen = Set<String>()
+        return plugins.filter { plugin in
+            guard seen.insert(plugin.manifest.id).inserted else {
+                Log.usage.error(
+                    "plugin \(plugin.directory.lastPathComponent, privacy: .public) skipped: duplicate id \(plugin.manifest.id, privacy: .public)")
+                return false
+            }
+            return true
+        }
     }
 
     /// Plugins registered at launch, so the first rescan after `start()` does
@@ -147,7 +162,8 @@ final class PluginRegistry {
     /// has bootstrapped them.
     func seed(_ plugins: [RegisteredPlugin]) {
         queue.async {
-            self.current = Dictionary(uniqueKeysWithValues: plugins.map { ($0.manifest.id, $0) })
+            self.current = Dictionary(plugins.map { ($0.manifest.id, $0) },
+                                      uniquingKeysWith: { first, _ in first })
         }
     }
 
@@ -161,7 +177,10 @@ final class PluginRegistry {
     /// there was nothing to watch at launch.
     func start() {
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        queue.async { self.rescan() }
+        queue.async {
+            self.stopped = false
+            self.rescan()
+        }
 
         let descriptor = open(directory.path, O_EVTONLY)
         guard descriptor >= 0 else {
@@ -176,11 +195,16 @@ final class PluginRegistry {
         self.source = source
     }
 
+    /// Synchronous on the queue: when `stop` returns, every rescan armed
+    /// before it has run and the flag is set, so nothing — a late event, an
+    /// in-flight debounce — can report or re-create watches behind its back.
+    /// Must never be called from the registry's own queue.
     func stop() {
         debounce?.cancel()
         source?.cancel()
         source = nil
-        queue.async {
+        queue.sync {
+            self.stopped = true
             for (_, pluginSource) in self.pluginSources { pluginSource.cancel() }
             self.pluginSources.removeAll()
         }
@@ -189,8 +213,14 @@ final class PluginRegistry {
     /// Directory events arrive in bursts (an installer writes the manifest and
     /// then the glyph); one rescan after the burst settles covers them all.
     private func scheduleRescan() {
+        guard !stopped else { return }
         debounce?.cancel()
-        let item = DispatchWorkItem { [weak self] in self?.rescan() }
+        let item = DispatchWorkItem { [weak self] in
+            // Armed before `stop`, fired after it: the flag is checked again
+            // here so that window cannot run a rescan that re-creates watches.
+            guard let self, !self.stopped else { return }
+            self.rescan()
+        }
         debounce = item
         queue.asyncAfter(deadline: .now() + 0.5, execute: item)
     }
@@ -202,6 +232,12 @@ final class PluginRegistry {
     /// a watch of its own, refreshed after each rescan — valid plugin or not,
     /// because a botched install that is fixed a moment later must be noticed
     /// too. Runs on `queue`, from `rescan`.
+    ///
+    /// That is also the detection boundary: watches cover the root and one
+    /// subdirectory level, so an exec binary living outside the plugin tree
+    /// (or nested deeper) that is overwritten in place is caught only at the
+    /// next launch scan. Either way, `approve` pins the bytes as they are at
+    /// approval time.
     private func updateWatches() {
         let subdirectories = (try? fileManager.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: [.isDirectoryKey],
@@ -227,7 +263,10 @@ final class PluginRegistry {
     }
 
     private func rescan() {
-        let found = Dictionary(uniqueKeysWithValues: scan().map { ($0.manifest.id, $0) })
+        // `scan` already drops duplicate ids; `uniquingKeysWith` keeps the
+        // crash out of reach even if that ever changes.
+        let found = Dictionary(scan().map { ($0.manifest.id, $0) },
+                               uniquingKeysWith: { first, _ in first })
         var added: [RegisteredPlugin] = []
         var removed: [String] = []
         for (id, plugin) in found {
