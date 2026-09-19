@@ -54,7 +54,11 @@ actor ExternalPluginProvider: UsageProvider {
     static let timeoutCeiling: TimeInterval = 30
     /// How long SIGTERM gets to work before SIGKILL ends the child regardless.
     static let sigkillGrace: TimeInterval = 2
+    /// A snapshot JSON is kilobytes; a plugin streaming forever must not grow
+    /// memory without bound.
     static let stdoutCap = 1_048_576
+    /// The tail is all the tooltip ever shows, so there is nothing to gain
+    /// beyond this.
     static let stderrCap = 65_536
 
     static func effectiveTimeout(for manifest: PluginManifest) -> TimeInterval {
