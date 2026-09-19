@@ -405,7 +405,7 @@ final class NotchPositionPersistenceTests: XCTestCase {
 @Test func approvingAPluginPinsTheHashAndConnectsIt() {
     let suite = "PreferencesTests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!
-    defer { UserDefaults().removePersistentDomain(forName: suite) }
+    defer { defaults.removePersistentDomain(forName: suite) }
     let preferences = Preferences(defaults: defaults)
 
     #expect(preferences.approvedHash(forPlugin: "codemie-budget") == nil)
@@ -420,4 +420,5 @@ final class NotchPositionPersistenceTests: XCTestCase {
     // Persisted: a fresh Preferences over the same suite sees the approval.
     let reloaded = Preferences(defaults: defaults)
     #expect(reloaded.approvedHash(forPlugin: "codemie-budget") == "deadbeef")
+    #expect(reloaded.isConnected("codemie-budget"))
 }
