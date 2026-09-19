@@ -1,43 +1,66 @@
 import AppKit
 
-/// Turns registry events into live providers: registers them with the store,
-/// connects never-seen plugin ids by default, loads their glyphs, and attaches
-/// any declared activity monitor. Owns the `PluginRegistry`'s lifetime.
-///
-/// Connecting by default is the one place plugins differ from discovered
-/// Claude profiles: a manifest exists because someone ran the vendor's
-/// installer on purpose, whereas a `~/.claude-work` directory can appear
-/// without the user ever asking Codenotch to watch it. A toggle-off afterwards
-/// persists through the ordinary `connectedProviders` mechanism — "novel"
-/// means novel, not forced on every launch.
+/// Turns registry events into live providers — once the user has approved
+/// them. A plugin whose content hash matches the pinned approval registers
+/// and honors the ordinary connected toggle; anything else (new, changed,
+/// never approved) goes onto the pending list that Settings renders with an
+/// Enable button, and its provider is not registered. The hash covers the
+/// manifest and the executable, so a silent binary swap re-pends the plugin.
 @MainActor
 final class PluginCoordinator {
+    /// A plugin waiting for the user's explicit approval, as the Settings row
+    /// needs it.
+    struct PendingPlugin: Equatable, Identifiable {
+        let id: String
+        let displayName: String
+        let execPath: String
+        let execArgs: [String]
+        let contentHash: String
+
+        var commandLine: String {
+            ([execPath] + execArgs).joined(separator: " ")
+        }
+
+        var shortHash: String { String(contentHash.prefix(12)) }
+    }
+
     private let registry: PluginRegistry
     private let store: UsageStore
     private let preferences: Preferences
     private weak var activity: ActivityCoordinator?
 
+    /// Read by Settings through a closure; kept current by every mutation of
+    /// `pending`. Not `@Published` — the coordinator is not an
+    /// `ObservableObject`, and the sheet re-reads on appear and after approve.
+    private(set) var pendingPlugins: [PendingPlugin] = []
+    private var pending: [String: PluginRegistry.RegisteredPlugin] = [:]
+
     init(registry: PluginRegistry,
          store: UsageStore,
          preferences: Preferences,
-         activity: ActivityCoordinator) {
+         activity: ActivityCoordinator? = nil) {
         self.registry = registry
         self.store = store
         self.preferences = preferences
         self.activity = activity
     }
 
-    /// Plugins found at launch are already in the store's initial provider
+    /// Plugins found at launch, already partitioned by the caller against the
+    /// stored approvals. Approved ones are in the store's initial provider
     /// array and have already been through `reconcile`, so this only does what
     /// launch cannot have done yet: glyphs and activity monitors.
-    func bootstrap(_ plugins: [PluginRegistry.RegisteredPlugin]) {
-        for plugin in plugins {
+    func bootstrap(approved: [PluginRegistry.RegisteredPlugin],
+                   pending: [PluginRegistry.RegisteredPlugin]) {
+        for plugin in approved {
             registerGlyph(for: plugin)
             if let monitor = Self.activityMonitor(for: plugin.manifest) {
                 activity?.setMonitor(monitor, for: plugin.manifest.id)
             }
         }
-        registry.seed(plugins)
+        for plugin in pending {
+            trackPending(plugin)
+        }
+        registry.seed(approved + pending)
     }
 
     func start() {
@@ -51,24 +74,57 @@ final class PluginCoordinator {
         registry.stop()
     }
 
+    /// Pin the pending plugin's current hash and register it. Approving is
+    /// the only path that connects a plugin: there is no auto-connect.
+    func approve(pluginID: String) {
+        guard let plugin = pending.removeValue(forKey: pluginID) else { return }
+        preferences.approvePlugin(pluginID, hash: plugin.contentHash)
+        publishPending()
+        register(plugin)
+    }
+
     private func apply(_ change: PluginRegistry.Change) {
         for id in change.removedIDs {
             store.deregister(providerID: id)
             activity?.removeMonitor(for: id)
             PluginGlyphStore.shared.remove(providerID: id)
+            pending.removeValue(forKey: id)
+            publishPending()
         }
         for plugin in change.added {
-            let manifest = plugin.manifest
-            registerGlyph(for: plugin)
-            let provider = ExternalPluginProvider(manifest: manifest)
-            if !preferences.seenProviders.contains(manifest.id) {
-                preferences.setConnected(true, for: manifest.id)
+            if preferences.approvedHash(forPlugin: plugin.manifest.id) == plugin.contentHash {
+                register(plugin)
+            } else {
+                trackPending(plugin)
             }
-            store.register(provider)
-            if let monitor = Self.activityMonitor(for: manifest) {
-                activity?.setMonitor(monitor, for: manifest.id)
-            }
-            Log.usage.info("plugin registered: \(manifest.id, privacy: .public) (\(manifest.displayName, privacy: .public))")
+        }
+    }
+
+    private func register(_ plugin: PluginRegistry.RegisteredPlugin) {
+        let manifest = plugin.manifest
+        registerGlyph(for: plugin)
+        store.register(ExternalPluginProvider(manifest: manifest))
+        if let monitor = Self.activityMonitor(for: manifest) {
+            activity?.setMonitor(monitor, for: manifest.id)
+        }
+        Log.usage.info("plugin registered: \(manifest.id, privacy: .public) (\(manifest.displayName, privacy: .public))")
+    }
+
+    private func trackPending(_ plugin: PluginRegistry.RegisteredPlugin) {
+        pending[plugin.manifest.id] = plugin
+        publishPending()
+        Log.usage.info("plugin pending approval: \(plugin.manifest.id, privacy: .public)")
+    }
+
+    private func publishPending() {
+        pendingPlugins = pending.values.map { plugin in
+            PendingPlugin(id: plugin.manifest.id,
+                          displayName: plugin.manifest.displayName,
+                          execPath: plugin.manifest.exec.path,
+                          execArgs: plugin.manifest.exec.args,
+                          contentHash: plugin.contentHash)
+        }.sorted {
+            $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
         }
     }
 
