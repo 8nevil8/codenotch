@@ -46,6 +46,7 @@ final class PluginRegistry {
 
     private let queue = DispatchQueue(label: "codenotch.plugins.registry", qos: .utility)
     private var source: DispatchSourceFileSystemObject?
+    private var pluginSources: [String: DispatchSourceFileSystemObject] = [:]
     private var debounce: DispatchWorkItem?
     private var current: [String: RegisteredPlugin] = [:]
 
@@ -179,6 +180,10 @@ final class PluginRegistry {
         debounce?.cancel()
         source?.cancel()
         source = nil
+        queue.async {
+            for (_, pluginSource) in self.pluginSources { pluginSource.cancel() }
+            self.pluginSources.removeAll()
+        }
     }
 
     /// Directory events arrive in bursts (an installer writes the manifest and
@@ -188,6 +193,37 @@ final class PluginRegistry {
         let item = DispatchWorkItem { [weak self] in self?.rescan() }
         debounce = item
         queue.asyncAfter(deadline: .now() + 0.5, execute: item)
+    }
+
+    /// The root watch sees plugin directories come and go, but a vnode event
+    /// does not propagate upwards: a manifest rewritten *inside* a plugin
+    /// directory never fires on the root, and a silent edit is exactly what
+    /// the content hash exists to catch. So every immediate subdirectory gets
+    /// a watch of its own, refreshed after each rescan — valid plugin or not,
+    /// because a botched install that is fixed a moment later must be noticed
+    /// too. Runs on `queue`, from `rescan`.
+    private func updateWatches() {
+        let subdirectories = (try? fileManager.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles])) ?? []
+        let paths = Set(subdirectories.compactMap { url in
+            ((try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true)
+                ? url.path : nil
+        })
+        let stale = pluginSources.keys.filter { !paths.contains($0) }
+        for path in stale {
+            pluginSources.removeValue(forKey: path)?.cancel()
+        }
+        for path in paths where pluginSources[path] == nil {
+            let descriptor = open(path, O_EVTONLY)
+            guard descriptor >= 0 else { continue }
+            let source = DispatchSource.makeFileSystemObjectSource(
+                fileDescriptor: descriptor, eventMask: [.write, .rename, .delete], queue: queue)
+            source.setEventHandler { [weak self] in self?.scheduleRescan() }
+            source.setCancelHandler { close(descriptor) }
+            source.resume()
+            pluginSources[path] = source
+        }
     }
 
     private func rescan() {
@@ -204,6 +240,9 @@ final class PluginRegistry {
             removed.append(id)
         }
         current = found
+        // Not gated on the diff: a brand-new empty subdirectory changes nothing
+        // yet, but still needs its watch before the installer writes into it.
+        updateWatches()
         let change = Change(added: added, removedIDs: removed)
         guard change != .none else { return }
         onChange?(change)

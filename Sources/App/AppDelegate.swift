@@ -104,7 +104,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Set in the non-demo branch below; the plugin coordinator wires them
         // up once the store and the activity coordinator exist.
         var pluginRegistry: PluginRegistry?
-        var discoveredPlugins: [PluginRegistry.RegisteredPlugin] = []
+        var approvedPlugins: [PluginRegistry.RegisteredPlugin] = []
+        var pendingPlugins: [PluginRegistry.RegisteredPlugin] = []
 
         // `CODENOTCH_DEMO=1` puts the design frame's three providers on screen
         // with its numbers, for screenshots and for eyeballing the layout.
@@ -164,28 +165,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                    })]
                 + webProviders
 
-            // Runtime-registered plugins ride the same array from here on:
-            // reconcile, ordering, archiving and rendering are all keyed on
-            // the provider id and do not care where the provider came from.
+            // Runtime-registered plugins ride the same array from here on —
+            // but only ones whose current build matches the hash the user
+            // approved. The rest wait in Settings as pending approvals.
             //
             // Frozen now, before plugins join the array: a closure over the
             // `var` would see them on later rescans and reject every plugin
             // as colliding with itself.
             let builtInIDs = Set(allProviders.map(\.id))
+            let builtInDisplayNames = Set(allProviders.map(\.displayName))
             let registry = PluginRegistry(
                 directory: PluginRegistry.defaultDirectory(),
-                builtInIDs: { builtInIDs }
+                builtInIDs: { builtInIDs },
+                builtInDisplayNames: { builtInDisplayNames }
             )
-            discoveredPlugins = registry.scan()
-            pluginRegistry = registry
-            allProviders += discoveredPlugins.map { ExternalPluginProvider(manifest: $0.manifest) }
-            // A manifest exists because someone ran the vendor's installer on
-            // purpose, so a plugin the preferences have never seen starts
-            // connected — unlike a discovered Claude profile, which can appear
-            // without anyone asking Codenotch to watch it.
-            for plugin in discoveredPlugins where !preferences.seenProviders.contains(plugin.manifest.id) {
-                preferences.setConnected(true, for: plugin.manifest.id)
+            let discovered = registry.scan()
+            approvedPlugins = discovered.filter {
+                preferences.approvedHash(forPlugin: $0.manifest.id) == $0.contentHash
             }
+            pendingPlugins = discovered.filter {
+                preferences.approvedHash(forPlugin: $0.manifest.id) != $0.contentHash
+            }
+            pluginRegistry = registry
+            allProviders += approvedPlugins.map { ExternalPluginProvider(manifest: $0.manifest) }
             preferences.reconcile(discoveredIDs: allProviders.map(\.id))
             let store = UsageStore(
                 providers: allProviders,
@@ -756,7 +758,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let pluginRegistry, let store = self.store {
             let coordinator = PluginCoordinator(registry: pluginRegistry, store: store,
                                                 preferences: preferences, activity: activity)
-            coordinator.bootstrap(discoveredPlugins)
+            coordinator.bootstrap(approved: approvedPlugins, pending: pendingPlugins)
             coordinator.start()
             self.pluginCoordinator = coordinator
         }
