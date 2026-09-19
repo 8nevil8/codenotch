@@ -395,7 +395,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.previewWeeklyLimitAlert()
                 },
                 usageStore: store, ollamaRelay: relay, lmstudioMetrics: lmstudio,
-                phoneLinkPairing: phonePairing, phoneLinkRegistry: phoneRegistry, phoneLinkServerStatus: serverStatus
+                phoneLinkPairing: phonePairing, phoneLinkRegistry: phoneRegistry, phoneLinkServerStatus: serverStatus,
+                pendingPlugins: { [weak self] in self?.pluginCoordinator?.pendingPlugins ?? [] },
+                approvePlugin: { [weak self] in self?.pluginCoordinator?.approve(pluginID: $0) }
             )
             // The gear toggles; everything else that opens settings opens it.
             fleet.onOpenSettings = { [weak settings] in settings?.toggle() }

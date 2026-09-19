@@ -370,6 +370,8 @@ private extension AnyTransition {
 struct SettingsView: View {
     @ObservedObject var preferences: Preferences
     let providers: () -> [ProviderSummary]
+    var pendingPlugins: () -> [PluginCoordinator.PendingPlugin] = { [] }
+    var approvePlugin: (String) -> Void = { _ in }
     var phoneLinkPairing: PhoneLinkPairing?
     var phoneLinkRegistry: PhoneLinkRegistry?
     var phoneLinkServerStatus: PhoneLinkServerStatus?
