@@ -220,6 +220,16 @@ struct PluginManifestTests {
         }
     }
 
+    @Test func rejectsAPaddedBuiltInDisplayName() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = try decode(manifestJSON(displayName: " Claude"))
+        #expect(throws: PluginManifest.ValidationError.impersonatesBuiltIn(" Claude")) {
+            try manifest.validated(builtInIDs: [], builtInDisplayNames: ["Claude"],
+                                   pluginDirectory: directory)
+        }
+    }
+
     // MARK: - Glyph containment
 
     @Test func rejectsAGlyphThatEscapesThePluginDirectory() throws {
@@ -243,6 +253,34 @@ struct PluginManifestTests {
             withDestinationURL: outside)
         let manifest = try decode(manifestJSON(glyph: "glyph.png"))
         #expect(throws: PluginManifest.ValidationError.glyphEscapesPluginDirectory("glyph.png")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsAGlyphInASiblingDirectorySharingANamePrefix() throws {
+        let root = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = root.appendingPathComponent("plugin", isDirectory: true)
+        let sibling = root.appendingPathComponent("plugin-extra", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: sibling, withIntermediateDirectories: true)
+        try Data([0x89, 0x50, 0x4E, 0x47]).write(to: sibling.appendingPathComponent("glyph.png"))
+        let manifest = try decode(manifestJSON(glyph: "../plugin-extra/glyph.png"))
+        #expect(throws: PluginManifest.ValidationError.glyphEscapesPluginDirectory("../plugin-extra/glyph.png")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func acceptsAGlyphSymlinkThatStaysInsideThePluginDirectory() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let target = directory.appendingPathComponent("glyph.png")
+        try Data([0x89, 0x50, 0x4E, 0x47]).write(to: target)
+        try FileManager.default.createSymbolicLink(
+            at: directory.appendingPathComponent("icon.png"),
+            withDestinationURL: target)
+        let manifest = try decode(manifestJSON(glyph: "icon.png"))
+        #expect(throws: Never.self) {
             try manifest.validated(builtInIDs: [], pluginDirectory: directory)
         }
     }
@@ -277,6 +315,19 @@ struct PluginManifestTests {
         let manifest = try decode(manifestJSON(
             signInRun: "\"signIn\": {\"guidance\": \"g\", \"run\": [\"\(file.path)\"]},"))
         #expect(throws: PluginManifest.ValidationError.signInNotExecutable(file.path)) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsAGroupWritableSignInExecutable() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("tool")
+        try "#!/bin/sh\n".write(to: file, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o775], ofItemAtPath: file.path)
+        let manifest = try decode(manifestJSON(
+            signInRun: "\"signIn\": {\"guidance\": \"g\", \"run\": [\"\(file.path)\"]},"))
+        #expect(throws: PluginManifest.ValidationError.signInUntrusted(file.path)) {
             try manifest.validated(builtInIDs: [], pluginDirectory: directory)
         }
     }

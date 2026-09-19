@@ -106,9 +106,11 @@ struct PluginManifest: Codable, Equatable, Sendable {
         guard Self.isValidDisplayName(displayName) else {
             throw ValidationError.malformedDisplayName(displayName)
         }
-        // Case-insensitive: "claude" is as much an impersonation as "Claude".
+        // Trimmed and case-insensitive: " claude" is as much an impersonation
+        // as "Claude". The error still names what the vendor actually wrote.
+        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !builtInDisplayNames.contains(where: {
-            $0.caseInsensitiveCompare(displayName) == .orderedSame
+            $0.caseInsensitiveCompare(trimmed) == .orderedSame
         }) else {
             throw ValidationError.impersonatesBuiltIn(displayName)
         }
