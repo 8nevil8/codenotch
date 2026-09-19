@@ -34,11 +34,15 @@ struct PendingPluginRow: View {
                             .font(.system(size: 10))
                     }
                     .buttonStyle(SettingsIconButtonStyle())
+                    .accessibilityLabel(L10n.t("Copy full SHA-256"))
                     .help(L10n.t("Copy the full hash."))
                 }
             }
             .font(.caption)
             .foregroundStyle(.tertiary)
+            // 48 = the handle, the glyph and the two gaps before the name —
+            // the same metric AccountRow uses, so the detail starts under the
+            // first letter of the name in both rows.
             .padding(.leading, 48)
         }
     }

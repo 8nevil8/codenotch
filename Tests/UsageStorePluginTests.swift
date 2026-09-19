@@ -37,6 +37,29 @@ struct UsageStorePluginTests {
         #expect(store.snapshots[0].windows.first?.usedFraction == 0.42)
     }
 
+    @Test func summariesMarkOnlyRealPluginsAsPlugins() async {
+        let (store, _, suite) = makeStore()
+        defer { cleanup(suite) }
+        store.register(Stub(id: "stub-tool"))
+
+        let manifest = PluginManifest(
+            schema: 1, id: "codemie-budget", displayName: "CodeMie Budget", version: "0.1.0",
+            exec: PluginManifest.Exec(path: "/bin/sh", args: [], timeoutSeconds: nil),
+            glyph: nil, signIn: nil, activity: nil)
+        let plugin = ExternalPluginProvider(manifest: manifest) { _ in
+            ExternalPluginProvider.ExecResult(status: 0,
+                                              stdout: Data(#"{"windows":[]}"#.utf8),
+                                              stderr: Data())
+        }
+        store.register(plugin)
+
+        // The badge a settings row draws hangs off this flag: a real plugin
+        // must never read as built-in, and anything else must never read as a
+        // plugin.
+        #expect(store.providerSummaries.first { $0.id == "codemie-budget" }?.isPlugin == true)
+        #expect(store.providerSummaries.first { $0.id == "stub-tool" }?.isPlugin == false)
+    }
+
     @Test func registeringADisconnectedPluginStaysQuiet() async {
         let (store, _, suite) = makeStore(disconnected: ["codemie-budget"])
         defer { cleanup(suite) }

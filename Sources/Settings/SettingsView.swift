@@ -727,6 +727,11 @@ struct SettingsView: View {
                         PendingPluginRow(plugin: plugin) {
                             approvePlugin(plugin.id)
                             pending = pendingPlugins()
+                            // The just-approved provider is registered
+                            // synchronously, so re-read the rows too — waiting
+                            // for the next window-key refresh would strand the
+                            // plugin out of both groups until then.
+                            accounts = providers()
                         }
                     }
                     Text(L10n.t("A plugin is an executable another tool installed. It runs on every refresh as Codenotch — enable only one you installed yourself."))
