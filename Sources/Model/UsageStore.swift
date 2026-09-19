@@ -234,7 +234,8 @@ final class UsageStore: ObservableObject {
                             account: disconnected.contains(provider.id) ? nil : provider.account(),
                             signIn: provider.signInRoute,
                             wasRefusedAccess: refusedAccess.contains(provider.id),
-                            needsSignInRenewal: needsRenewal.contains(provider.id))
+                            needsSignInRenewal: needsRenewal.contains(provider.id),
+                            isPlugin: provider is ExternalPluginProvider)
             return [summary] + models.filter { $0.sourceProviderID == provider.id }
         }
         return ProviderOrder.arrange(summaries, by: order, id: \.id)
