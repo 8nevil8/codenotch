@@ -63,4 +63,37 @@ struct PluginTrustTests {
         try FileManager.default.setAttributes([.posixPermissions: 0o775], ofItemAtPath: file.path)
         #expect(!PluginTrust.isTrustedExecutable(file))
     }
+
+    @Test func aNonexistentPathIsNotTrusted() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let missing = directory.appendingPathComponent("missing")
+        #expect(!PluginTrust.isTrustedDirectory(missing))
+        #expect(!PluginTrust.isTrustedManifest(missing))
+        #expect(!PluginTrust.isTrustedExecutable(missing))
+    }
+
+    @Test func aDirectoryIsNotATrustedManifest() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        #expect(!PluginTrust.isTrustedManifest(directory))
+    }
+
+    @Test func aRegularFileIsNotATrustedDirectory() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("plugin.json")
+        try "{}".write(to: file, atomically: true, encoding: .utf8)
+        #expect(!PluginTrust.isTrustedDirectory(file))
+    }
+
+    @Test func aSymlinkedManifestIsNotTrusted() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let target = directory.appendingPathComponent("plugin.json")
+        try "{}".write(to: target, atomically: true, encoding: .utf8)
+        let link = directory.appendingPathComponent("linked.json")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        #expect(!PluginTrust.isTrustedManifest(link))
+    }
 }
