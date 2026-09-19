@@ -1,8 +1,9 @@
+import CryptoKit
 import Foundation
 
 /// Discovers and watches plugin manifests under the plugins directory
-/// (`~/Library/Application Support/Codenotch/Plugins`, overridable with
-/// `CODENOTCH_PLUGINS_DIR`).
+/// (`~/Library/Application Support/Codenotch/Plugins`; debug builds can
+/// override it with `CODENOTCH_PLUGINS_DIR`).
 ///
 /// Registration is the vendor's installer writing a directory containing a
 /// `plugin.json`; unregistration is deleting it. The registry scans at launch
@@ -15,6 +16,11 @@ final class PluginRegistry {
     struct RegisteredPlugin: Equatable {
         let manifest: PluginManifest
         let directory: URL
+        /// SHA-256 over the `plugin.json` bytes followed by the exec binary's
+        /// bytes — the value an approval pins. Being part of `Equatable` means a
+        /// silent binary swap diffs as a re-registration, which re-pends the
+        /// plugin downstream.
+        let contentHash: String
     }
 
     struct Change: Equatable {
@@ -30,6 +36,9 @@ final class PluginRegistry {
     /// The built-in provider ids, asked of the caller because they live in
     /// `AppDelegate` and a registry has no business reaching across the app.
     private let builtInIDs: () -> Set<String>
+    /// The built-in display names, for impersonation rejection — same reasoning
+    /// as `builtInIDs`.
+    private let builtInDisplayNames: () -> Set<String>
     private let fileManager: FileManager
     /// Called on an internal queue with each real change. Re-entrancy is the
     /// consumer's problem (`PluginCoordinator` hops to the main actor).
@@ -42,10 +51,25 @@ final class PluginRegistry {
 
     init(directory: URL,
          builtInIDs: @escaping () -> Set<String>,
+         builtInDisplayNames: @escaping () -> Set<String> = { [] },
          fileManager: FileManager = .default) {
         self.directory = directory
         self.builtInIDs = builtInIDs
+        self.builtInDisplayNames = builtInDisplayNames
         self.fileManager = fileManager
+    }
+
+    /// SHA-256 of the manifest bytes followed by the executable's bytes. Nil when
+    /// the executable cannot be read — an unreadable binary is unapprovable, so
+    /// the plugin is skipped rather than registered unhashable.
+    static func contentHash(manifestData: Data, manifest: PluginManifest) -> String? {
+        guard let execData = try? Data(contentsOf: URL(fileURLWithPath: manifest.exec.path),
+                                       options: .mappedIfSafe)
+        else { return nil }
+        var hasher = SHA256()
+        hasher.update(data: manifestData)
+        hasher.update(data: execData)
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     static func defaultDirectory(
@@ -53,9 +77,13 @@ final class PluginRegistry {
                                                            in: .userDomainMask)[0],
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> URL {
+        // Debug builds only: a release that followed an environment variable would
+        // let any launcher redirect Codenotch's plugins to a folder it controls.
+        #if DEBUG
         if let override = environment["CODENOTCH_PLUGINS_DIR"], !override.isEmpty {
             return URL(fileURLWithPath: (override as NSString).expandingTildeInPath, isDirectory: true)
         }
+        #endif
         return applicationSupport
             .appendingPathComponent("Codenotch", isDirectory: true)
             .appendingPathComponent("Plugins", isDirectory: true)
@@ -66,6 +94,11 @@ final class PluginRegistry {
     /// The validated plugin set as it stands right now. Safe to call from
     /// anywhere; the diff state is only touched on `queue`.
     func scan() -> [RegisteredPlugin] {
+        guard PluginTrust.isTrustedDirectory(directory, fileManager: fileManager) else {
+            Log.usage.error(
+                "plugins directory untrusted, refusing to scan: \(self.directory.path, privacy: .public)")
+            return []
+        }
         guard let entries = try? fileManager.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.isDirectoryKey],
@@ -75,14 +108,31 @@ final class PluginRegistry {
         return entries.compactMap { pluginDirectory in
             guard (try? pluginDirectory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
             else { return nil }
+            guard PluginTrust.isTrustedDirectory(pluginDirectory, fileManager: fileManager) else {
+                Log.usage.error(
+                    "plugin \(pluginDirectory.lastPathComponent, privacy: .public) skipped: untrusted directory")
+                return nil
+            }
             let manifestURL = pluginDirectory.appendingPathComponent("plugin.json")
+            guard PluginTrust.isTrustedManifest(manifestURL, fileManager: fileManager) else {
+                Log.usage.error(
+                    "plugin \(pluginDirectory.lastPathComponent, privacy: .public) skipped: untrusted manifest")
+                return nil
+            }
             guard let data = fileManager.contents(atPath: manifestURL.path) else { return nil }
             do {
                 let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
                 let validated = try manifest.validated(builtInIDs: builtInIDs(),
+                                                       builtInDisplayNames: builtInDisplayNames(),
                                                        pluginDirectory: pluginDirectory,
                                                        fileManager: fileManager)
-                return RegisteredPlugin(manifest: validated, directory: pluginDirectory)
+                guard let hash = Self.contentHash(manifestData: data, manifest: validated) else {
+                    Log.usage.error(
+                        "plugin \(pluginDirectory.lastPathComponent, privacy: .public) skipped: executable unreadable")
+                    return nil
+                }
+                return RegisteredPlugin(manifest: validated, directory: pluginDirectory,
+                                        contentHash: hash)
             } catch {
                 Log.usage.error(
                     "plugin \(pluginDirectory.lastPathComponent, privacy: .public) skipped: \(error.localizedDescription, privacy: .public)")
