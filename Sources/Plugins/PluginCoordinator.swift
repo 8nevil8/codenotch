@@ -16,12 +16,17 @@ final class PluginCoordinator {
         let execPath: String
         let execArgs: [String]
         let contentHash: String
+        /// The plugin's own folder, so the row can offer to show the manifest
+        /// before anyone enables it.
+        let directory: URL
 
         var commandLine: String {
             ([execPath] + execArgs).joined(separator: " ")
         }
 
         var shortHash: String { String(contentHash.prefix(12)) }
+
+        var manifestURL: URL { directory.appendingPathComponent("plugin.json") }
     }
 
     private let registry: PluginRegistry
@@ -122,7 +127,8 @@ final class PluginCoordinator {
                           displayName: plugin.manifest.displayName,
                           execPath: plugin.manifest.exec.path,
                           execArgs: plugin.manifest.exec.args,
-                          contentHash: plugin.contentHash)
+                          contentHash: plugin.contentHash,
+                          directory: plugin.directory)
         }.sorted {
             $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
         }

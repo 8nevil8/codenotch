@@ -28,11 +28,13 @@ add).
 Registration is not execution. A new or changed plugin is not run: it appears
 in Settings → Accounts under "Plugins awaiting approval", showing the display
 name, the full exec path and arguments, and a SHA-256 over the `plugin.json`
-bytes followed by the executable's bytes. Enabling it approves that exact
-build — any change to either file re-pends the plugin — and approvals persist,
-so reinstalling identical bytes needs no second approval. Plugin rows in
-Settings carry a "Plugin" badge, so an external provider never reads as a
-built-in.
+bytes followed by the executable's bytes. The row also offers to open the
+manifest and reveal the plugin folder, so the decision can be made from the
+files themselves, not from the plugin's own description of them. Enabling it
+approves that exact build — any change to either file re-pends the plugin —
+and approvals persist, so reinstalling identical bytes needs no second
+approval. Plugin rows in Settings carry a "Plugin" badge, so an external
+provider never reads as a built-in.
 
 The plugins directory, each plugin directory, and each `plugin.json` must be
 owned by the user, must not be symlinks, and must not be group- or
