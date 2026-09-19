@@ -452,6 +452,7 @@ final class Preferences: ObservableObject {
         static let disconnected = "hiddenProviders"
         static let connected = "connectedProviders"
         static let seen = "seenProviders"
+        // A new key, so there is nothing under the old app name to migrate.
         static let pluginApprovals = "pluginApprovals"
         static let disabledModels = "disabledModels"
         static let ollamaEndpoint = "ollamaEndpoint"
