@@ -123,6 +123,10 @@ struct UsageResetCard: View {
                                 .font(Typography.cardTitle)
                                 .foregroundStyle(Palette.textPrimary)
                                 .layoutPriority(1)
+                            if event.glyph == .external {
+                                NotchPluginBadge()
+                                    .layoutPriority(1)
+                            }
 
                             Spacer(minLength: Design.px(12))
 
