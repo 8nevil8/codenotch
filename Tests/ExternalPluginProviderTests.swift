@@ -123,6 +123,59 @@ struct ExternalPluginProviderTests {
         #expect(provider.signInRoute == .guidance("Run codemie profile login."))
     }
 
+    // MARK: - Verification before every run
+
+    @Test func aPluginThatFailsVerificationIsNotRunAndIsReported() async {
+        let tampered = Counter()
+        let ran = Counter()
+        let provider = ExternalPluginProvider(
+            manifest: manifest(),
+            verify: { false },
+            onTamper: { tampered.bump() }
+        ) { _ in
+            ran.bump()
+            return self.result(0, stdout: self.payloadJSON)
+        }
+
+        await #expect(throws: PluginExecError.changedSinceApproval) {
+            _ = try await provider.fetchSnapshot()
+        }
+        #expect(ran.value == 0, "a changed plugin must not be spawned")
+        #expect(tampered.value == 1, "the registry must hear about it")
+    }
+
+    @Test func aPluginThatPassesVerificationRuns() async throws {
+        let tampered = Counter()
+        let provider = ExternalPluginProvider(
+            manifest: manifest(), verify: { true }, onTamper: { tampered.bump() }
+        ) { _ in self.result(0, stdout: self.payloadJSON) }
+
+        _ = try await provider.fetchSnapshot()
+        #expect(tampered.value == 0)
+    }
+
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+        var value: Int { lock.withLock { count } }
+        func bump() { lock.withLock { count += 1 } }
+    }
+
+    @Test func theChildRunsInThePluginDirectory() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ExternalPluginProviderTests.\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = spawnManifest(args: ["-c", "pwd"])
+
+        let result = try await ExternalPluginProvider.spawn(manifest: manifest, directory: directory)
+
+        let printed = String(data: result.stdout, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(printed.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path }
+                == directory.resolvingSymlinksInPath().path)
+    }
+
     // MARK: - The real spawn
 
     @Test func spawnRunsTheExecutableAndCapturesBothPipes() async throws {

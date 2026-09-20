@@ -2,12 +2,15 @@ import Foundation
 
 /// A plugin exited non-zero without a protocol meaning. Carries the stderr
 /// tail so the tooltip can say what actually happened.
-enum PluginExecError: LocalizedError {
+enum PluginExecError: LocalizedError, Equatable {
     case failed(String)
+    /// The plugin directory no longer matches the approved build. Not run.
+    case changedSinceApproval
 
     var errorDescription: String? {
         switch self {
         case .failed(let why): return why
+        case .changedSinceApproval: return L10n.t("Plugin changed since it was approved")
         }
     }
 }
@@ -71,6 +74,11 @@ actor ExternalPluginProvider: UsageProvider {
     /// be slow and machine-dependent, and the part worth testing — what the
     /// output means — is downstream of the spawn.
     let run: @Sendable (PluginManifest) async throws -> ExecResult
+    /// Whether the plugin on disk is still the build the user approved.
+    /// Asked before every run and every sign-in; a "no" refuses to spawn and
+    /// reports through `onTamper`, so the registry can re-pend it.
+    let verify: @Sendable () -> Bool
+    let onTamper: @Sendable () -> Void
 
     /// The last account the plugin reported, shared with `account()` below.
     /// `account()` is a synchronous, non-async protocol requirement called on
@@ -87,11 +95,31 @@ actor ExternalPluginProvider: UsageProvider {
     nonisolated let id: String
     nonisolated let displayName: String
     nonisolated var glyph: ProviderGlyph { .external }
+    nonisolated var isPlugin: Bool { true }
 
+    /// The real thing: spawns the manifest's executable inside its plugin
+    /// directory, after `verify` has vouched for the directory.
+    init(plugin: PluginRegistry.RegisteredPlugin,
+         verify: @escaping @Sendable () -> Bool,
+         onTamper: @escaping @Sendable () -> Void) {
+        self.manifest = plugin.manifest
+        self.run = { try await Self.spawn(manifest: $0, directory: plugin.directory) }
+        self.verify = verify
+        self.onTamper = onTamper
+        self.id = plugin.manifest.id
+        self.displayName = plugin.manifest.displayName
+    }
+
+    /// Tests: an injected runner, and no directory on disk to verify unless
+    /// the test says otherwise.
     init(manifest: PluginManifest,
-         run: (@Sendable (PluginManifest) async throws -> ExecResult)? = nil) {
+         verify: @escaping @Sendable () -> Bool = { true },
+         onTamper: @escaping @Sendable () -> Void = {},
+         run: @escaping @Sendable (PluginManifest) async throws -> ExecResult) {
         self.manifest = manifest
-        self.run = run ?? { try await Self.spawn(manifest: $0) }
+        self.run = run
+        self.verify = verify
+        self.onTamper = onTamper
         self.id = manifest.id
         self.displayName = manifest.displayName
     }
@@ -99,6 +127,10 @@ actor ExternalPluginProvider: UsageProvider {
     // MARK: - UsageProvider
 
     func fetchSnapshot() async throws -> ProviderSnapshot {
+        guard verify() else {
+            onTamper()
+            throw PluginExecError.changedSinceApproval
+        }
         let result = try await run(manifest)
         switch result.status {
         case Exit.ok:
@@ -106,7 +138,8 @@ actor ExternalPluginProvider: UsageProvider {
         case Exit.needsAuth:
             throw UsageProviderError.needsAuth
         case Exit.rateLimited:
-            throw UsageProviderError.rateLimited(retryAfter: Self.retryAfter(in: result.stdout) ?? 60)
+            throw UsageProviderError.rateLimited(
+                retryAfter: PluginSnapshotPayload.retryAfter(in: result.stdout) ?? 60)
         case Exit.nothingMetered:
             throw UsageProviderError.nothingMetered(Self.stderrTail(result.stderr) ?? "nothing metered")
         default:
@@ -141,6 +174,10 @@ actor ExternalPluginProvider: UsageProvider {
     /// command may open a browser and outlive this call by minutes.
     nonisolated func presentSignIn() {
         guard let command = manifest.signIn?.run, let executable = command.first else { return }
+        guard verify() else {
+            onTamper()
+            return
+        }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = Array(command.dropFirst())
@@ -165,18 +202,21 @@ actor ExternalPluginProvider: UsageProvider {
     /// the protocol). stderr is captured, not discarded: exit-code mapping
     /// uses its tail as the error message. Both pipes are drained on their own
     /// threads because a pipe nobody reads fills at 64 KB and stalls the child.
-    static func spawn(manifest: PluginManifest) async throws -> ExecResult {
+    static func spawn(manifest: PluginManifest, directory: URL? = nil) async throws -> ExecResult {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
-                continuation.resume(with: Result { try spawnSync(manifest: manifest) })
+                continuation.resume(with: Result { try spawnSync(manifest: manifest, directory: directory) })
             }
         }
     }
 
-    private static func spawnSync(manifest: PluginManifest) throws -> ExecResult {
+    private static func spawnSync(manifest: PluginManifest, directory: URL?) throws -> ExecResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: manifest.exec.path)
         process.arguments = manifest.exec.args
+        // The plugin directory, so a relative `script.sh` in the arguments
+        // means the one the hash covers.
+        process.currentDirectoryURL = directory
         process.environment = childEnvironment
         process.standardInput = FileHandle.nullDevice
         let stdout = Pipe()
@@ -264,12 +304,6 @@ actor ExternalPluginProvider: UsageProvider {
         return (data, overflow)
     }
 
-    /// A rate-limited plugin may say when to come back:
-    /// `{"retryAfterSeconds": N}` on stdout.
-    private static func retryAfter(in stdout: Data) -> TimeInterval? {
-        struct Hint: Decodable { let retryAfterSeconds: TimeInterval }
-        return try? JSONDecoder().decode(Hint.self, from: stdout).retryAfterSeconds
-    }
 
     /// The last line of stderr, trimmed — enough to say *what* failed without
     /// pouring a stack trace into a tooltip.

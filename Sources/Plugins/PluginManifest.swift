@@ -78,12 +78,24 @@ struct PluginManifest: Codable, Equatable, Sendable {
         case execMissing(String)
         case execNotExecutable(String)
         case execUntrusted(String)
+        /// A user-owned executable outside the plugin directory: not covered
+        /// by the content hash, so not something an approval could pin.
+        case execOutsidePluginDirectory(String)
+        /// `env`, which finds its real program on PATH — a lookup the hash
+        /// cannot see and the user cannot read off the command line.
+        case execResolvesThroughPATH(String)
         case glyphMissing(String)
         case glyphEscapesPluginDirectory(String)
         case signInNotAbsolute(String)
         case signInMissing(String)
         case signInNotExecutable(String)
         case signInUntrusted(String)
+        case signInOutsidePluginDirectory(String)
+        case signInResolvesThroughPATH(String)
+        /// An absolute path among the arguments that leaves the plugin
+        /// directory: for `/bin/sh script` that is the code, and it has to be
+        /// where the hash covers it.
+        case argumentOutsidePluginDirectory(String)
         case unknownActivity(String)
     }
 
@@ -106,33 +118,36 @@ struct PluginManifest: Codable, Equatable, Sendable {
         guard Self.isValidDisplayName(displayName) else {
             throw ValidationError.malformedDisplayName(displayName)
         }
-        // Trimmed and case-insensitive: " claude" is as much an impersonation
-        // as "Claude". The error still names what the vendor actually wrote.
-        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !builtInDisplayNames.contains(where: {
-            $0.caseInsensitiveCompare(trimmed) == .orderedSame
-        }) else {
+        // Compared as skeletons, not strings: " claude", "Сlaude" with a
+        // Cyrillic С, "Clàude", "C1aude" and "Claude!" are all the built-in
+        // name to a reader. The error still names what the vendor wrote.
+        let skeleton = Self.skeleton(displayName)
+        guard !builtInDisplayNames.contains(where: { Self.skeleton($0) == skeleton }) else {
             throw ValidationError.impersonatesBuiltIn(displayName)
         }
-        try Self.validateExecutable(exec.path, fileManager: fileManager,
+        try Self.validateExecutable(exec.path, pluginDirectory: pluginDirectory, fileManager: fileManager,
                                     notAbsolute: { ValidationError.execNotAbsolute($0) },
                                     missing: { ValidationError.execMissing($0) },
                                     notExecutable: { ValidationError.execNotExecutable($0) },
-                                    untrusted: { ValidationError.execUntrusted($0) })
+                                    untrusted: { ValidationError.execUntrusted($0) },
+                                    outside: { ValidationError.execOutsidePluginDirectory($0) },
+                                    throughPATH: { ValidationError.execResolvesThroughPATH($0) })
+        try Self.validateArguments(exec.args, pluginDirectory: pluginDirectory)
         if let run = signIn?.run, let executable = run.first {
-            try Self.validateExecutable(executable, fileManager: fileManager,
+            try Self.validateExecutable(executable, pluginDirectory: pluginDirectory, fileManager: fileManager,
                                         notAbsolute: { ValidationError.signInNotAbsolute($0) },
                                         missing: { ValidationError.signInMissing($0) },
                                         notExecutable: { ValidationError.signInNotExecutable($0) },
-                                        untrusted: { ValidationError.signInUntrusted($0) })
+                                        untrusted: { ValidationError.signInUntrusted($0) },
+                                        outside: { ValidationError.signInOutsidePluginDirectory($0) },
+                                        throughPATH: { ValidationError.signInResolvesThroughPATH($0) })
+            try Self.validateArguments(Array(run.dropFirst()), pluginDirectory: pluginDirectory)
         }
         if let glyph {
             // Resolve `..` and symlinks before comparing prefixes: the glyph must
             // stay inside the plugin directory it was registered from.
-            let root = pluginDirectory.standardizedFileURL.resolvingSymlinksInPath()
-            let location = root.appendingPathComponent(glyph.image)
-                .standardizedFileURL.resolvingSymlinksInPath()
-            guard location.path.hasPrefix(root.path + "/") else {
+            let location = pluginDirectory.appendingPathComponent(glyph.image)
+            guard PluginTrust.isInside(location.path, directory: pluginDirectory) else {
                 throw ValidationError.glyphEscapesPluginDirectory(glyph.image)
             }
             guard fileManager.fileExists(atPath: location.path) else {
@@ -145,6 +160,54 @@ struct PluginManifest: Codable, Equatable, Sendable {
         return self
     }
 
+    /// What a name looks like to a person, reduced to what a comparison can
+    /// see: compatibility-decomposed (fullwidth and ligature forms fold to
+    /// plain letters), accents and invisible format characters dropped,
+    /// lowercased, the letters of other scripts that print like Latin ones
+    /// mapped onto them, digits that pass for letters likewise, and only
+    /// letters and digits kept. Two names with the same skeleton are the same
+    /// name on screen.
+    static func skeleton(_ name: String) -> String {
+        var result = ""
+        for scalar in name.decomposedStringWithCompatibilityMapping.lowercased().unicodeScalars {
+            let category = scalar.properties.generalCategory
+            switch category {
+            case .nonspacingMark, .spacingMark, .enclosingMark, .format:
+                continue
+            default:
+                break
+            }
+            let mapped = Self.confusables[scalar] ?? scalar
+            guard mapped.properties.isAlphabetic || CharacterSet.decimalDigits.contains(mapped) else { continue }
+            result.unicodeScalars.append(mapped)
+        }
+        return result
+    }
+
+    /// Lowercase letters from other scripts, and digits, that print as Latin
+    /// letters at the notch's sizes. Not exhaustive — the built-in names are
+    /// short Latin words, so this covers the letters those words use.
+    private static let confusables: [Unicode.Scalar: Unicode.Scalar] = {
+        let pairs: [(String, String)] = [
+            // Cyrillic
+            ("а", "a"), ("е", "e"), ("о", "o"), ("р", "p"), ("с", "c"), ("у", "y"), ("х", "x"),
+            ("і", "i"), ("ј", "j"), ("ѕ", "s"), ("ԁ", "d"), ("ԛ", "q"), ("ԝ", "w"), ("һ", "h"),
+            ("ӏ", "l"), ("ν", "v"), ("ɡ", "g"), ("ԍ", "g"), ("т", "t"), ("к", "k"), ("м", "m"),
+            ("в", "b"), ("н", "h"), ("ё", "e"),
+            // Greek
+            ("α", "a"), ("ο", "o"), ("ε", "e"), ("ι", "i"), ("κ", "k"), ("ρ", "p"), ("τ", "t"),
+            ("υ", "u"), ("χ", "x"), ("γ", "y"), ("β", "b"), ("η", "n"), ("μ", "u"),
+            // Latin lookalikes and digits
+            ("ı", "i"), ("ℓ", "l"), ("ꜱ", "s"), ("0", "o"), ("1", "l"), ("3", "e"), ("5", "s"),
+            ("ß", "b"),
+        ]
+        var table: [Unicode.Scalar: Unicode.Scalar] = [:]
+        for (from, to) in pairs {
+            table[from.unicodeScalars.first!] = to.unicodeScalars.first!
+        }
+        return table
+    }()
+
     /// A name the settings sheet can print without being lied to or laid out by:
     /// short, single-line, free of control characters.
     static func isValidDisplayName(_ name: String) -> Bool {
@@ -156,13 +219,21 @@ struct PluginManifest: Codable, Equatable, Sendable {
         }
     }
 
+    /// Where an executable may live: inside the plugin directory, where the
+    /// content hash covers its bytes, or anywhere root-owned, where the user's
+    /// own processes cannot touch it. A user-owned binary elsewhere —
+    /// `~/Downloads/tool`, a Homebrew install — is neither, and is refused
+    /// rather than pinned by a hash that would not see it change.
     private static func validateExecutable(
         _ path: String,
+        pluginDirectory: URL,
         fileManager: FileManager,
         notAbsolute: (String) -> ValidationError,
         missing: (String) -> ValidationError,
         notExecutable: (String) -> ValidationError,
-        untrusted: (String) -> ValidationError
+        untrusted: (String) -> ValidationError,
+        outside: (String) -> ValidationError,
+        throughPATH: (String) -> ValidationError
     ) throws {
         guard path.hasPrefix("/") else { throw notAbsolute(path) }
         var isDirectory: ObjCBool = false
@@ -170,7 +241,28 @@ struct PluginManifest: Codable, Equatable, Sendable {
               !isDirectory.boolValue
         else { throw missing(path) }
         guard fileManager.isExecutableFile(atPath: path) else { throw notExecutable(path) }
-        guard PluginTrust.isTrustedExecutable(URL(fileURLWithPath: path), fileManager: fileManager)
+        let url = URL(fileURLWithPath: path)
+        guard PluginTrust.isTrustedExecutable(url, fileManager: fileManager)
         else { throw untrusted(path) }
+        guard !PluginTrust.isInside(path, directory: pluginDirectory) else { return }
+        guard PluginTrust.isOwnedByRoot(url, fileManager: fileManager) else { throw outside(path) }
+        // `/usr/bin/env node …` runs whatever `node` is first on the child's
+        // PATH — which includes Homebrew's user-writable bin — so the pinned
+        // executable would not be the one that runs.
+        guard url.lastPathComponent != "env" else { throw throughPATH(path) }
+    }
+
+    /// Absolute paths among the arguments must stay inside the plugin
+    /// directory. Relative ones are resolved there too — the child runs with
+    /// the plugin directory as its working directory — so `script.sh` and
+    /// `<plugin dir>/script.sh` are both fine, and `/Users/me/other.sh` is
+    /// not: a script an interpreter runs is code, and code lives where the
+    /// hash sees it.
+    private static func validateArguments(_ arguments: [String], pluginDirectory: URL) throws {
+        for argument in arguments where argument.hasPrefix("/") {
+            guard PluginTrust.isInside(argument, directory: pluginDirectory) else {
+                throw ValidationError.argumentOutsidePluginDirectory(argument)
+            }
+        }
     }
 }

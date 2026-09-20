@@ -42,6 +42,14 @@ enum KeychainItem {
     /// `kSecAttrModificationDate` is a timestamp, not a version counter — and
     /// where they would, either duplicate is an equally good answer.
     static func newest(service: String, account: String? = nil) -> Match? {
+        newest(among: matches(service: service, account: account))
+    }
+
+    /// Every item under a service, without its secret. Enumerating attributes
+    /// never prompts, so a caller that must know whether it is looking at
+    /// *one* item — its own — or at a name something else has also filed
+    /// under can find out for free.
+    static func matches(service: String, account: String? = nil) -> [Match] {
         var query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
@@ -53,13 +61,17 @@ enum KeychainItem {
 
         var result: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess
-        else { return nil }
+        else { return [] }
 
         // A single match still comes back as one dictionary rather than an
         // array of one — `kSecMatchLimitAll` promises "every match", not "an
         // array", and one is not the many it means.
         let items = (result as? [[CFString: Any]]) ?? (result as? [CFString: Any]).map { [$0] } ?? []
-        return winner(among: items)
+        return items.compactMap { item -> Match? in
+            guard let ref = item[kSecValuePersistentRef] as? Data else { return nil }
+            return Match(modifiedAt: item[kSecAttrModificationDate] as? Date, persistentRef: ref,
+                         service: item[kSecAttrService] as? String ?? "")
+        }
     }
 
     /// The selection itself, apart from the query that produces its input.
@@ -67,16 +79,19 @@ enum KeychainItem {
     /// to point it at — so this is the half that can be, and is: given several
     /// duplicates, does the newest one actually win.
     static func winner(among items: [[CFString: Any]]) -> Match? {
-        items
-            .compactMap { item -> Match? in
-                guard let ref = item[kSecValuePersistentRef] as? Data else { return nil }
-                return Match(modifiedAt: item[kSecAttrModificationDate] as? Date, persistentRef: ref,
-                             service: item[kSecAttrService] as? String ?? "")
-            }
-            // A duplicate with no modification date is possible in principle
-            // and worth keeping rather than discarding; `.distantPast` only
-            // decides its rank against the others, never whether it exists.
-            .max { ($0.modifiedAt ?? .distantPast) < ($1.modifiedAt ?? .distantPast) }
+        newest(among: items.compactMap { item -> Match? in
+            guard let ref = item[kSecValuePersistentRef] as? Data else { return nil }
+            return Match(modifiedAt: item[kSecAttrModificationDate] as? Date, persistentRef: ref,
+                         service: item[kSecAttrService] as? String ?? "")
+        })
+    }
+
+    /// The same choice over already-decoded matches.
+    static func newest(among matches: [Match]) -> Match? {
+        // A duplicate with no modification date is possible in principle
+        // and worth keeping rather than discarding; `.distantPast` only
+        // decides its rank against the others, never whether it exists.
+        matches.max { ($0.modifiedAt ?? .distantPast) < ($1.modifiedAt ?? .distantPast) }
     }
 
     /// When the owning app last wrote the newest item under this service, or

@@ -15,6 +15,7 @@ struct PluginManifestTests {
         schema: Int = 1,
         displayName: String = "CodeMie Budget",
         execPath: String = "/bin/sh",
+        execArgs: String = #"["snapshot"]"#,
         signInRun: String? = #""signIn": {"guidance": "Run codemie profile login.", "run": ["/bin/sh", "-l"]},"#,
         glyph: String? = nil
     ) -> Data {
@@ -28,7 +29,7 @@ struct PluginManifestTests {
             "id": "\#(id)",
             "displayName": "\#(displayName)",
             "version": "0.1.0",
-            "exec": {"path": "\#(execPath)", "args": ["snapshot"], "timeoutSeconds": 12},
+            "exec": {"path": "\#(execPath)", "args": \#(execArgs), "timeoutSeconds": 12},
             \#(glyphSection)
             \#(signInRun ?? "")
             "activity": {"type": "claudeSessions", "configDir": "~/.claude"}
@@ -230,6 +231,54 @@ struct PluginManifestTests {
         }
     }
 
+    /// Lookalikes: another script's letters, accents, digits, punctuation,
+    /// fullwidth forms, stray spaces. All read "Claude".
+    @Test(arguments: ["Сlaude", "Clаude", "Clàude", "C1aude", "Claude!", "Ｃｌａｕｄｅ", "cl aude"])
+    func rejectsAConfusableBuiltInDisplayName(name: String) throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = try decode(manifestJSON(displayName: name))
+        #expect(throws: PluginManifest.ValidationError.impersonatesBuiltIn(name)) {
+            try manifest.validated(builtInIDs: [], builtInDisplayNames: ["Claude"],
+                                   pluginDirectory: directory)
+        }
+    }
+
+    /// Names that merely mention a built-in are not that built-in: the
+    /// reference plugin is "CodeMie Claude", and the notch and tooltip badge
+    /// every plugin regardless.
+    @Test(arguments: ["CodeMie Claude", "Claude Max", "Claude (work)", "Codex"])
+    func acceptsADisplayNameThatIsNotABuiltIn(name: String) throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = try decode(manifestJSON(displayName: name))
+        #expect(throws: Never.self) {
+            try manifest.validated(builtInIDs: [], builtInDisplayNames: ["Claude"],
+                                   pluginDirectory: directory)
+        }
+    }
+
+    /// Invisible characters never reach the skeleton: they are control
+    /// characters to the name check, and malformed on their own.
+    @Test(arguments: ["Claude\u{200B}", "Cla\u{00AD}ude"])
+    func rejectsAnInvisibleCharacterAsMalformed(name: String) throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = try decode(manifestJSON(displayName: name))
+        #expect(throws: PluginManifest.ValidationError.malformedDisplayName(name)) {
+            try manifest.validated(builtInIDs: [], builtInDisplayNames: ["Claude"],
+                                   pluginDirectory: directory)
+        }
+    }
+
+    @Test func theSkeletonFoldsWhatAReaderCannotTell() {
+        #expect(PluginManifest.skeleton("Claude") == "claude")
+        #expect(PluginManifest.skeleton("Сlaude") == "claude")
+        #expect(PluginManifest.skeleton("Ｃｌａｕｄｅ") == "claude")
+        #expect(PluginManifest.skeleton("GitHub Copilot") == "githubcopilot")
+        #expect(PluginManifest.skeleton("CodeMie Claude") != "claude")
+    }
+
     // MARK: - Glyph containment
 
     @Test func rejectsAGlyphThatEscapesThePluginDirectory() throws {
@@ -351,6 +400,109 @@ struct PluginManifestTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let manifest = try decode(manifestJSON(execPath: "/bin/sh"))
         #expect(throws: Never.self) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    // MARK: - Executable placement
+
+    private func writeExecutable(in directory: URL, named name: String = "tool") throws -> URL {
+        let file = directory.appendingPathComponent(name)
+        try "#!/bin/sh\n".write(to: file, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: file.path)
+        return file
+    }
+
+    @Test func acceptsAUserOwnedExecInsideThePluginDirectory() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = try writeExecutable(in: directory)
+        let manifest = try decode(manifestJSON(execPath: file.path))
+        #expect(throws: Never.self) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsAUserOwnedExecOutsideThePluginDirectory() throws {
+        let directory = try makeDirectory()
+        let elsewhere = try makeDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+            try? FileManager.default.removeItem(at: elsewhere)
+        }
+        // Owned, 0755, not a symlink: trusted by every mode check, and still
+        // refused — the hash cannot see it change.
+        let file = try writeExecutable(in: elsewhere)
+        let manifest = try decode(manifestJSON(execPath: file.path))
+        #expect(throws: PluginManifest.ValidationError.execOutsidePluginDirectory(file.path)) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsEnvAsTheExec() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = try decode(manifestJSON(execPath: "/usr/bin/env", execArgs: #"["node", "x.js"]"#))
+        #expect(throws: PluginManifest.ValidationError.execResolvesThroughPATH("/usr/bin/env")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsAUserOwnedSignInOutsideThePluginDirectory() throws {
+        let directory = try makeDirectory()
+        let elsewhere = try makeDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+            try? FileManager.default.removeItem(at: elsewhere)
+        }
+        let file = try writeExecutable(in: elsewhere)
+        let manifest = try decode(manifestJSON(
+            signInRun: "\"signIn\": {\"guidance\": \"g\", \"run\": [\"\(file.path)\"]},"))
+        #expect(throws: PluginManifest.ValidationError.signInOutsidePluginDirectory(file.path)) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    // MARK: - Argument containment
+
+    @Test func acceptsArgumentsThatStayInsideThePluginDirectory() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let inside = directory.appendingPathComponent("run.sh").path
+        let manifest = try decode(manifestJSON(
+            execArgs: #"["\#(inside)", "script.sh", "--flag", "-c", "echo"]"#))
+        #expect(throws: Never.self) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsAnAbsoluteArgumentOutsideThePluginDirectory() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // `/bin/sh /Users/me/run.sh`: the script is the code, and it is not
+        // where the hash covers it.
+        let manifest = try decode(manifestJSON(execArgs: #"["/Users/me/run.sh"]"#))
+        #expect(throws: PluginManifest.ValidationError.argumentOutsidePluginDirectory("/Users/me/run.sh")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsAnArgumentThatEscapesWithDotDot() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let escaping = directory.appendingPathComponent("../run.sh").path
+        let manifest = try decode(manifestJSON(execArgs: #"["\#(escaping)"]"#))
+        #expect(throws: PluginManifest.ValidationError.argumentOutsidePluginDirectory(escaping)) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsASignInArgumentOutsideThePluginDirectory() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = try decode(manifestJSON(
+            signInRun: #""signIn": {"guidance": "g", "run": ["/bin/sh", "/Users/me/login.sh"]},"#))
+        #expect(throws: PluginManifest.ValidationError.argumentOutsidePluginDirectory("/Users/me/login.sh")) {
             try manifest.validated(builtInIDs: [], pluginDirectory: directory)
         }
     }

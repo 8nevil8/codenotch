@@ -34,6 +34,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let previewWeeklyLimitAlert: (() -> Void)?
     private let pendingPlugins: () -> [PluginCoordinator.PendingPlugin]
     private let approvePlugin: (String) -> Void
+    private let revokePlugin: (String) -> Void
 
     init(preferences: Preferences,
          providers: @escaping () -> [ProviderSummary],
@@ -51,9 +52,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
          ollamaRelay: OllamaActivityRelay? = nil,
          lmstudioMetrics: LMStudioMetrics? = nil, phoneLinkPairing: PhoneLinkPairing? = nil, phoneLinkRegistry: PhoneLinkRegistry? = nil, phoneLinkServerStatus: PhoneLinkServerStatus? = nil,
          pendingPlugins: @escaping () -> [PluginCoordinator.PendingPlugin] = { [] },
-         approvePlugin: @escaping (String) -> Void = { _ in }) {
+         approvePlugin: @escaping (String) -> Void = { _ in },
+         revokePlugin: @escaping (String) -> Void = { _ in }) {
         self.pendingPlugins = pendingPlugins
         self.approvePlugin = approvePlugin
+        self.revokePlugin = revokePlugin
         self.ollamaRelay = ollamaRelay
         self.lmstudioMetrics = lmstudioMetrics
         self.usageStore = usageStore
@@ -262,7 +265,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.initialFirstResponder = nil
         window.contentView = NSHostingView(
             rootView: SettingsView(preferences: preferences,
-                                   providers: providers, pendingPlugins: pendingPlugins, approvePlugin: approvePlugin,
+                                   providers: providers, pendingPlugins: pendingPlugins,
+                                   approvePlugin: approvePlugin, revokePlugin: revokePlugin,
                                    phoneLinkPairing: phoneLinkPairing, phoneLinkRegistry: phoneLinkRegistry, phoneLinkServerStatus: phoneLinkServerStatus,
                                    signOut: signOut,
                                    signIn: signIn,

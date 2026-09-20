@@ -125,6 +125,81 @@ struct PluginCoordinatorTests {
                 "the old build's provider must be deregistered while pending")
     }
 
+    @Test func revokingForgetsTheApprovalAndRependsTheSameBuild() async throws {
+        let (root, registry, store, preferences, suite) = try makeWorld()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            UserDefaults().removePersistentDomain(forName: suite)
+        }
+        let coordinator = PluginCoordinator(registry: registry, store: store,
+                                            preferences: preferences)
+        coordinator.start()
+        defer { coordinator.stop() }
+        try writePlugin("codemie-budget", in: root)
+        #expect(await waitFor { !coordinator.pendingPlugins.isEmpty })
+        let hash = try #require(coordinator.pendingPlugins.first?.contentHash)
+        coordinator.approve(pluginID: "codemie-budget")
+        #expect(store.knownIDs.contains("codemie-budget"))
+
+        coordinator.revoke(pluginID: "codemie-budget")
+
+        #expect(!store.knownIDs.contains("codemie-budget"), "a revoked plugin must stop running")
+        #expect(preferences.approvedHash(forPlugin: "codemie-budget") == nil)
+        #expect(!preferences.isConnected("codemie-budget"))
+        #expect(coordinator.pendingPlugins.map(\.id) == ["codemie-budget"],
+                "still on disk, so it is back to asking")
+        #expect(coordinator.pendingPlugins.first?.contentHash == hash)
+    }
+
+    @Test func deletingAnApprovedPluginForgetsTheApproval() async throws {
+        let (root, registry, store, preferences, suite) = try makeWorld()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            UserDefaults().removePersistentDomain(forName: suite)
+        }
+        let directory = try writePlugin("codemie-budget", in: root)
+        let hash = try #require(registry.scan().first?.contentHash)
+        preferences.approvePlugin("codemie-budget", hash: hash)
+        let coordinator = PluginCoordinator(registry: registry, store: store,
+                                            preferences: preferences)
+        coordinator.start()
+        defer { coordinator.stop() }
+        #expect(await waitFor { store.knownIDs.contains("codemie-budget") })
+
+        try FileManager.default.removeItem(at: directory)
+        #expect(await waitFor { !store.knownIDs.contains("codemie-budget") })
+        #expect(preferences.approvedHash(forPlugin: "codemie-budget") == nil,
+                "an approval lives exactly as long as the plugin directory")
+
+        // The same bytes, dropped back in, ask again rather than run.
+        try writePlugin("codemie-budget", in: root)
+        #expect(await waitFor { coordinator.pendingPlugins.map(\.id) == ["codemie-budget"] })
+        #expect(!store.knownIDs.contains("codemie-budget"))
+    }
+
+    @Test func thePendingRowShowsTheSignInCommand() async throws {
+        let (root, registry, store, preferences, suite) = try makeWorld()
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            UserDefaults().removePersistentDomain(forName: suite)
+        }
+        let coordinator = PluginCoordinator(registry: registry, store: store,
+                                            preferences: preferences)
+        coordinator.start()
+        defer { coordinator.stop() }
+        let directory = root.appendingPathComponent("codemie-budget", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try #"""
+        {"schema": 1, "id": "codemie-budget", "displayName": "A Plugin", "version": "1",
+         "exec": {"path": "/bin/sh", "args": ["snapshot"]},
+         "signIn": {"guidance": "g", "run": ["/bin/sh", "login.sh"]}}
+        """#.write(to: directory.appendingPathComponent("plugin.json"), atomically: true, encoding: .utf8)
+
+        #expect(await waitFor { !coordinator.pendingPlugins.isEmpty })
+        #expect(coordinator.pendingPlugins.first?.commandLine == "/bin/sh snapshot")
+        #expect(coordinator.pendingPlugins.first?.signInCommandLine == "/bin/sh login.sh")
+    }
+
     @Test func aRemovedPendingPluginLeavesTheList() async throws {
         let (root, registry, store, preferences, suite) = try makeWorld()
         defer {

@@ -23,10 +23,12 @@ final class Preferences: ObservableObject {
 
     /// Plugin id → the SHA-256 content hash the user approved. A plugin whose
     /// current hash matches runs; anything else sits pending in Settings until
-    /// the user enables that exact build again.
+    /// the user enables that exact build again. Kept in the keychain, not in
+    /// `defaults`: see `PluginApprovalStore`.
     @Published private(set) var pluginApprovals: [String: String] {
-        didSet { defaults.set(pluginApprovals, forKey: Keys.pluginApprovals) }
+        didSet { pluginApprovalStore.save(pluginApprovals) }
     }
+    private let pluginApprovalStore: PluginApprovalStore
 
     /// Loaded-model cells hide without stopping the shared runtime. Stored as
     /// the ones that are off: a model Ollama or LM Studio loads later stays
@@ -648,8 +650,13 @@ final class Preferences: ObservableObject {
         Log.usage.info("migrated \(old.count) settings from the previous app name")
     }
 
-    init(defaults: UserDefaults = .standard) {
+    /// `pluginApprovals` defaults to a store that forgets on exit — the right
+    /// answer for tests and the demo, and a safe one for the app only because
+    /// `AppDelegate` passes the keychain store explicitly.
+    init(defaults: UserDefaults = .standard,
+         pluginApprovals: PluginApprovalStore = EphemeralPluginApprovalStore()) {
         self.defaults = defaults
+        self.pluginApprovalStore = pluginApprovals
         self.isFirstLaunch = !defaults.bool(forKey: Keys.hasLaunched)
         defaults.set(true, forKey: Keys.hasLaunched)
         // Only the earlier local integration used this sentinel. Keep unrelated
@@ -695,7 +702,12 @@ final class Preferences: ObservableObject {
         }
         self.connectedProviders = connected.filter { !Self.isModelCell($0) }
         self.seenProviders = seen.filter { !Self.isModelCell($0) }
-        self.pluginApprovals = defaults.dictionary(forKey: Keys.pluginApprovals) as? [String: String] ?? [:]
+        self.pluginApprovals = pluginApprovals.load()
+        // An earlier build of the plugin gate kept approvals in `defaults`,
+        // which is exactly the forgeable place the keychain store replaces.
+        // They are dropped, not migrated: an entry there could have been
+        // written by anything.
+        defaults.removeObject(forKey: Keys.pluginApprovals)
         self.pendingHidden = hidden
         let models: Set<String>
         if let storedDisabled = defaults.stringArray(forKey: Keys.disabledModels) {
@@ -973,6 +985,13 @@ final class Preferences: ObservableObject {
     func approvePlugin(_ pluginID: String, hash: String) {
         pluginApprovals[pluginID] = hash
         setConnected(true, for: pluginID)
+    }
+
+    /// Forget the approval and switch the plugin off. The next time that
+    /// build appears it asks again, whatever its hash.
+    func revokePlugin(_ pluginID: String) {
+        guard pluginApprovals.removeValue(forKey: pluginID) != nil else { return }
+        setConnected(false, for: pluginID)
     }
 
     /// Fold this Mac's current provider ids into the stored on-list.

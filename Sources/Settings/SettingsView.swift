@@ -372,6 +372,7 @@ struct SettingsView: View {
     let providers: () -> [ProviderSummary]
     var pendingPlugins: () -> [PluginCoordinator.PendingPlugin] = { [] }
     var approvePlugin: (String) -> Void = { _ in }
+    var revokePlugin: (String) -> Void = { _ in }
     var phoneLinkPairing: PhoneLinkPairing?
     var phoneLinkRegistry: PhoneLinkRegistry?
     var phoneLinkServerStatus: PhoneLinkServerStatus?
@@ -717,7 +718,8 @@ struct SettingsView: View {
                                cursorRefresh: cursorRefresh,
                                onDrop: { cursorRefresh += 1 },
                                takePlaceOf: { move($0, onto: account.id) },
-                               didConnect: { connect(account.id) })
+                               didConnect: { connect(account.id) },
+                               revoke: revokeAndRefresh)
                 }
                 if connected.isEmpty {
                     Text(L10n.t("Nothing is connected, so the notch has no rings to draw."))
@@ -775,7 +777,8 @@ struct SettingsView: View {
                                    cursorRefresh: cursorRefresh,
                                    onDrop: {},
                                    takePlaceOf: { _ in false },
-                                   didConnect: { connect(account.id) })
+                                   didConnect: { connect(account.id) },
+                                   revoke: revokeAndRefresh)
                     }
                     // Says what switching one back on will do, which is the
                     // only question this group raises.
@@ -1321,6 +1324,14 @@ struct SettingsView: View {
         displays = DisplayOption.connected
     }
 
+    /// Revoking moves the plugin from the account rows back to the pending
+    /// list synchronously, so both are re-read at once.
+    private func revokeAndRefresh(_ pluginID: String) {
+        revokePlugin(pluginID)
+        accounts = providers()
+        pending = pendingPlugins()
+    }
+
     private var displayExplanation: String {
         switch preferences.displayPreference {
         case .followActiveWindow:
@@ -1657,6 +1668,8 @@ private struct AccountRow: View {
     /// Called after this row is switched on, so the list can decide where it
     /// now belongs. The row itself cannot: it can see only itself.
     let didConnect: () -> Void
+    /// Plugin rows only: forget the approval and stop running it.
+    var revoke: (String) -> Void = { _ in }
 
     @Environment(\.codenotchReduceTransparency) private var reduceTransparency
 
@@ -1786,6 +1799,15 @@ private struct AccountRow: View {
                     Button(destination.title) { open(destination) }
                         .controlSize(.small)
                         .help(destination.help)
+                }
+
+                // The switch only pauses a plugin; this forgets the trust
+                // decision itself, so the build has to be enabled again —
+                // and re-dropping it later cannot start it silently.
+                if provider.isPlugin {
+                    Button(L10n.t("Revoke…")) { revoke(provider.id) }
+                        .controlSize(.small)
+                        .help(L10n.t("Forget the approval for \(provider.name). It stops running and goes back to the approval list; enabling it again pins its files afresh."))
                 }
 
                 Toggle(provider.name, isOn: binding)

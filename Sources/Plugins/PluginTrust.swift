@@ -37,6 +37,27 @@ enum PluginTrust {
         return isOwnedAndNotShared(url, allowedOwners: [getuid(), 0], fileManager: fileManager)
     }
 
+    /// Owned by root. The one owner besides the user whose executables a
+    /// manifest may name from outside the plugin directory: nothing running
+    /// as the user can rewrite a root-owned, non-writable file, so its path
+    /// pins it as well as a hash would — and unlike a hash, does not re-ask
+    /// for every plugin on `/bin/sh` after each macOS update.
+    static func isOwnedByRoot(_ url: URL, fileManager: FileManager = .default) -> Bool {
+        guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+              let owner = attributes[.ownerAccountID] as? NSNumber
+        else { return false }
+        return owner.uint32Value == 0
+    }
+
+    /// Whether `path` lies inside `directory` once `..` and every symlink on
+    /// both sides are resolved — the containment check the glyph, the
+    /// executables and the absolute arguments all share.
+    static func isInside(_ path: String, directory: URL) -> Bool {
+        let root = directory.standardizedFileURL.resolvingSymlinksInPath().path
+        let resolved = URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
+        return resolved.hasPrefix(root + "/")
+    }
+
     private static func isOwnedAndNotShared(_ url: URL, allowedOwners: [uid_t],
                                             fileManager: FileManager) -> Bool {
         guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),

@@ -91,7 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Before Preferences reads anything, or the first launch flag and
         // every choice would be read from an empty domain.
         Preferences.migrateFromPreviousName()
-        let preferences = Preferences()
+        let preferences = Preferences(pluginApprovals: KeychainPluginApprovalStore())
         self.preferences = preferences
 
         // One notch per display: the fleet owns a controller for each screen
@@ -193,7 +193,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 preferences.approvedHash(forPlugin: $0.manifest.id) != $0.contentHash
             }
             pluginRegistry = registry
-            allProviders += approvedPlugins.map { ExternalPluginProvider(manifest: $0.manifest) }
+            allProviders += approvedPlugins.map { registry.provider(for: $0) }
             preferences.reconcile(discoveredIDs: allProviders.map(\.id))
             let store = UsageStore(
                 providers: allProviders,
@@ -397,7 +397,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 usageStore: store, ollamaRelay: relay, lmstudioMetrics: lmstudio,
                 phoneLinkPairing: phonePairing, phoneLinkRegistry: phoneRegistry, phoneLinkServerStatus: serverStatus,
                 pendingPlugins: { [weak self] in self?.pluginCoordinator?.pendingPlugins ?? [] },
-                approvePlugin: { [weak self] in self?.pluginCoordinator?.approve(pluginID: $0) }
+                approvePlugin: { [weak self] in self?.pluginCoordinator?.approve(pluginID: $0) },
+                revokePlugin: { [weak self] in self?.pluginCoordinator?.revoke(pluginID: $0) }
             )
             // The gear toggles; everything else that opens settings opens it.
             fleet.onOpenSettings = { [weak settings] in settings?.toggle() }

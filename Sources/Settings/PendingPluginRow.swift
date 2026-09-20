@@ -46,6 +46,10 @@ struct PendingPluginRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(plugin.commandLine)
                     .textSelection(.enabled)
+                if let signIn = plugin.signInCommandLine {
+                    Text(L10n.t("Sign in: \(signIn)"))
+                        .textSelection(.enabled)
+                }
                 HStack(spacing: 6) {
                     Text("SHA-256 \(plugin.shortHash)…")
                     Button {

@@ -147,12 +147,22 @@ struct PluginRegistryTests {
 
     // MARK: - Content hash
 
+    /// An executable inside the plugin directory, the only place a user-owned
+    /// one may live. Written before the manifest so the directory exists.
+    private func writeScript(_ body: String, named name: String = "tool.sh",
+                             for id: String, in root: URL) throws -> URL {
+        let directory = root.appendingPathComponent(id, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let script = directory.appendingPathComponent(name)
+        try "#!/bin/sh\n\(body)\n".write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        return script
+    }
+
     @Test func theContentHashCoversTheManifestAndTheExecutable() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let script = root.appendingPathComponent("tool.sh")
-        try "#!/bin/sh\necho one\n".write(to: script, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        let script = try writeScript("echo one", for: "codemie-budget", in: root)
         try writePlugin("codemie-budget", in: root, execPath: script.path)
         let registry = PluginRegistry(directory: root, builtInIDs: { [] })
         let first = registry.scan().first?.contentHash
@@ -162,6 +172,75 @@ struct PluginRegistryTests {
 
         #expect(first != nil)
         #expect(first != second, "a swapped executable must change the pinned hash")
+    }
+
+    @Test func theContentHashCoversEveryFileInTheDirectory() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        // `/bin/sh helper.sh`: the interpreter is root-owned and unhashed, so
+        // the script it runs is the code — and it is in the hash like
+        // everything else in the folder, however deep.
+        let directory = try writePlugin("codemie-budget", in: root, execPath: "/bin/sh")
+        let nested = directory.appendingPathComponent("lib", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        let helper = nested.appendingPathComponent("helper.sh")
+        try "echo one\n".write(to: helper, atomically: true, encoding: .utf8)
+        let registry = PluginRegistry(directory: root, builtInIDs: { [] })
+        let first = registry.scan().first?.contentHash
+
+        try "echo two\n".write(to: helper, atomically: true, encoding: .utf8)
+        let second = registry.scan().first?.contentHash
+        try "x".write(to: directory.appendingPathComponent("extra"), atomically: true, encoding: .utf8)
+        let third = registry.scan().first?.contentHash
+
+        #expect(first != nil)
+        #expect(first != second, "an edit to a nested file must change the pinned hash")
+        #expect(second != third, "a new file must change the pinned hash")
+    }
+
+    @Test func aDSStoreDoesNotChangeTheHash() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = try writePlugin("codemie-budget", in: root)
+        let registry = PluginRegistry(directory: root, builtInIDs: { [] })
+        let first = registry.scan().first?.contentHash
+
+        try Data([0, 1, 2]).write(to: directory.appendingPathComponent(".DS_Store"))
+        let second = registry.scan().first?.contentHash
+
+        #expect(first != nil)
+        #expect(first == second, "revealing the folder in Finder must not re-pend the plugin")
+    }
+
+    @Test func scanSkipsAUserOwnedExecutableOutsideThePluginDirectory() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        // Passes every ownership and mode check, and lives where the hash
+        // cannot see it change.
+        let script = root.appendingPathComponent("tool.sh")
+        try "#!/bin/sh\necho one\n".write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        try writePlugin("codemie-budget", in: root, execPath: script.path)
+        #expect(PluginRegistry(directory: root, builtInIDs: { [] }).scan().isEmpty)
+    }
+
+    @Test func isCurrentSeesAnEditAndAnUntrustedFolder() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let script = try writeScript("echo one", for: "codemie-budget", in: root)
+        let directory = try writePlugin("codemie-budget", in: root, execPath: script.path)
+        let registry = PluginRegistry(directory: root, builtInIDs: { [] })
+        let plugin = try #require(registry.scan().first)
+        #expect(registry.isCurrent(plugin))
+
+        try "#!/bin/sh\necho two\n".write(to: script, atomically: true, encoding: .utf8)
+        #expect(!registry.isCurrent(plugin), "an edited script is not the approved build")
+
+        try "#!/bin/sh\necho one\n".write(to: script, atomically: true, encoding: .utf8)
+        #expect(registry.isCurrent(plugin), "the approved bytes, restored, are current again")
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o775], ofItemAtPath: directory.path)
+        #expect(!registry.isCurrent(plugin), "a folder that lost its trust is not current either")
     }
 
     @Test func theContentHashCoversTheManifestBytes() throws {
@@ -187,8 +266,7 @@ struct PluginRegistryTests {
     @Test func scanSkipsAPluginWhoseExecutableIsUnreadable() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let script = root.appendingPathComponent("tool.sh")
-        try "#!/bin/sh\necho one\n".write(to: script, atomically: true, encoding: .utf8)
+        let script = try writeScript("echo one", for: "codemie-budget", in: root)
         // Execute-only and user-owned: passes validation's executable and
         // trust checks, but `Data(contentsOf:)` fails — and an unhashable
         // binary must not register.
@@ -203,9 +281,7 @@ struct PluginRegistryTests {
     @Test func anExecutableSwapReportsAReregistration() async throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let script = root.appendingPathComponent("tool.sh")
-        try "#!/bin/sh\necho one\n".write(to: script, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+        let script = try writeScript("echo one", for: "codemie-budget", in: root)
         try writePlugin("codemie-budget", in: root, execPath: script.path)
         let registry = PluginRegistry(directory: root, builtInIDs: { [] })
         registry.seed(registry.scan())

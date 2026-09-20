@@ -19,9 +19,16 @@ final class PluginCoordinator {
         /// The plugin's own folder, so the row can offer to show the manifest
         /// before anyone enables it.
         let directory: URL
+        /// What "Sign in" on the row would run, when the manifest declares
+        /// one — shown for the same reason the exec line is.
+        var signInCommand: [String]? = nil
 
         var commandLine: String {
             ([execPath] + execArgs).joined(separator: " ")
+        }
+
+        var signInCommandLine: String? {
+            signInCommand?.joined(separator: " ")
         }
 
         var shortHash: String { String(contentHash.prefix(12)) }
@@ -39,6 +46,9 @@ final class PluginCoordinator {
     /// `ObservableObject`, and the sheet re-reads on appear and after approve.
     private(set) var pendingPlugins: [PendingPlugin] = []
     private var pending: [String: PluginRegistry.RegisteredPlugin] = [:]
+    /// What is registered right now, kept so a revocation can hand the same
+    /// build back to the pending list without a rescan.
+    private var approved: [String: PluginRegistry.RegisteredPlugin] = [:]
 
     init(registry: PluginRegistry,
          store: UsageStore,
@@ -57,6 +67,7 @@ final class PluginCoordinator {
     func bootstrap(approved: [PluginRegistry.RegisteredPlugin],
                    pending: [PluginRegistry.RegisteredPlugin]) {
         for plugin in approved {
+            self.approved[plugin.manifest.id] = plugin
             registerGlyph(for: plugin)
             if let monitor = Self.activityMonitor(for: plugin.manifest) {
                 activity?.setMonitor(monitor, for: plugin.manifest.id)
@@ -88,13 +99,31 @@ final class PluginCoordinator {
         register(plugin)
     }
 
+    /// Forget the approval. The provider goes; the plugin, still on disk and
+    /// unchanged, returns to the pending list under the hash it had, so
+    /// enabling it again is one click and re-dropping it later is not
+    /// silent.
+    func revoke(pluginID: String) {
+        guard let plugin = approved[pluginID] else { return }
+        preferences.revokePlugin(pluginID)
+        unregister(pluginID)
+        trackPending(plugin)
+        Log.usage.info("plugin approval revoked: \(pluginID, privacy: .public)")
+    }
+
     private func apply(_ change: PluginRegistry.Change) {
+        let changed = Set(change.added.map(\.manifest.id))
         for id in change.removedIDs {
-            store.deregister(providerID: id)
-            activity?.removeMonitor(for: id)
-            PluginGlyphStore.shared.remove(providerID: id)
+            unregister(id)
             pending.removeValue(forKey: id)
             publishPending()
+            // Gone from disk, not merely changed: the approval goes with it.
+            // Reinstalling the same bytes asks again — a plugin the user
+            // deleted must not come back running because something
+            // re-dropped it.
+            if !changed.contains(id) {
+                preferences.revokePlugin(id)
+            }
         }
         for plugin in change.added {
             if preferences.approvedHash(forPlugin: plugin.manifest.id) == plugin.contentHash {
@@ -105,10 +134,18 @@ final class PluginCoordinator {
         }
     }
 
+    private func unregister(_ id: String) {
+        approved.removeValue(forKey: id)
+        store.deregister(providerID: id)
+        activity?.removeMonitor(for: id)
+        PluginGlyphStore.shared.remove(providerID: id)
+    }
+
     private func register(_ plugin: PluginRegistry.RegisteredPlugin) {
         let manifest = plugin.manifest
+        approved[manifest.id] = plugin
         registerGlyph(for: plugin)
-        store.register(ExternalPluginProvider(manifest: manifest))
+        store.register(registry.provider(for: plugin))
         if let monitor = Self.activityMonitor(for: manifest) {
             activity?.setMonitor(monitor, for: manifest.id)
         }
@@ -128,7 +165,8 @@ final class PluginCoordinator {
                           execPath: plugin.manifest.exec.path,
                           execArgs: plugin.manifest.exec.args,
                           contentHash: plugin.contentHash,
-                          directory: plugin.directory)
+                          directory: plugin.directory,
+                          signInCommand: plugin.manifest.signIn?.run)
         }.sorted {
             $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
         }
