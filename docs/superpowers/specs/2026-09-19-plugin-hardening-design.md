@@ -1,7 +1,8 @@
 # Plugin System Hardening — Design
 
-Date: 2026-09-19
-Status: Approved (design), pending implementation plan
+Date: 2026-09-19, revised 2026-09-20
+Status: Implemented. The revisions section at the end records where the
+implementation departs from the original decisions, and why.
 
 ## Background
 
@@ -122,3 +123,53 @@ Scan-time checks, fail closed with a logged reason:
 - No modal alert or notification for pending plugins.
 - No "revoke approval" UI beyond the existing connected toggle (approval
   pruning can be revisited if the reviewer asks).
+
+## Revisions (2026-09-20, after the second review)
+
+The second review of the implementation found the approval gate correct in
+flow but bypassable in storage, and the pinned hash narrower than what runs.
+These change the decisions above:
+
+- **Approvals live in the keychain, not UserDefaults** (`PluginApprovalStore`).
+  The preferences plist is writable by any process running as the user — the
+  same adversary that drops the manifest — so an approval there was
+  forgeable with one `defaults write`. The keychain item is ACL'd to the
+  app's signing identity. A planted duplicate item under the same name fails
+  closed: every approval is refused until it is gone. Approvals an earlier
+  build left in the plist are dropped, not migrated.
+- **The hash covers the whole plugin directory**, every file in path order
+  (`PluginRegistry.contentHash`), not the manifest plus the first-hop
+  executable. `/bin/sh run.sh` pins `run.sh`.
+- **Executables are confined.** `exec.path` and `signIn.run[0]` must resolve
+  inside the plugin directory, or be root-owned (system binaries); a
+  user-owned binary elsewhere is refused rather than pinned by a hash that
+  cannot see it. `/usr/bin/env` is refused outright. Absolute paths among
+  the arguments must stay inside the plugin directory; the child runs with
+  the plugin directory as its working directory, so relative script paths
+  resolve there. A root-owned executable's bytes are not hashed: the user's
+  processes cannot change them, and hashing would re-ask after every macOS
+  update.
+- **The plugin is re-checked before every run** (`PluginRegistry.isCurrent`):
+  trust, validation and hash, compared against what was approved. A mismatch
+  refuses to spawn and asks the registry to rescan, which re-pends or drops
+  the plugin. This closes the window between the watcher's debounce and a
+  poll, and covers edits below the one subdirectory level the watches see.
+- **Approvals can be revoked.** A plugin row in Settings offers *Revoke…*,
+  which forgets the approval, stops the provider and returns the plugin to
+  the pending list. Deleting a plugin directory forgets its approval too, so
+  re-dropping identical bytes asks again — the "approvals persist across
+  reinstall" decision is withdrawn.
+- **The plugin marker follows the provider everywhere.** `ProviderSnapshot`
+  reports `isPlugin`; the notch ring wears a puzzle-piece badge, the tooltip
+  and reset card carry a "Plugin" capsule beside the title, and system
+  notifications name the provider as "… (plugin)". Display names are compared
+  as confusable skeletons (script lookalikes, accents, digits, invisible
+  characters folded), still as whole names — "CodeMie Claude" is a plugin
+  that mentions Claude, and the badge is what keeps it honest.
+- **The payload is bounded** (`PluginSnapshotPayload.Bounds`): window count,
+  string lengths, `usedFraction`, money, `resetsAt`/`duration` horizon and
+  `retryAfterSeconds` are cut or clamped, non-finite numbers dropped.
+- The "no revoke UI" non-goal above no longer holds. Two items from the
+  review are not implemented here and are called out for decision: a
+  reserved id namespace prefix for plugins, and re-evaluating the built-in
+  collision set after launch.

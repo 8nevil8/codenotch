@@ -1730,7 +1730,7 @@ in `NotchLayoutTests`.
 - [x] Manifest + exec protocol (`docs/design/plugin-protocol.md`): a plugin is
       a `plugin.json` in `~/Library/Application Support/Codenotch/Plugins/<id>/`;
       Codenotch spawns it per poll and renders the JSON snapshot natively.
-      Design: `docs/specs/2026-09-18-provider-plugins-design.md`
+      Trust model: `docs/superpowers/specs/2026-09-19-plugin-hardening-design.md`
 - [x] `PluginRegistry` — scan + validate + `DispatchSource` watch, live
       register/deregister (`Sources/Plugins/`)
 - [x] `ExternalPluginProvider` — actor `UsageProvider` over the plugin process;

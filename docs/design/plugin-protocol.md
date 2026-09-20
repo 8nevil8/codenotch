@@ -27,26 +27,43 @@ add).
 
 Registration is not execution. A new or changed plugin is not run: it appears
 in Settings → Accounts under "Plugins awaiting approval", showing the display
-name, the full exec path and arguments, and a SHA-256 over the `plugin.json`
-bytes followed by the executable's bytes. The row also offers to open the
-manifest and reveal the plugin folder, so the decision can be made from the
-files themselves, not from the plugin's own description of them. Enabling it
-approves that exact build — any change to either file re-pends the plugin —
-and approvals persist, so reinstalling identical bytes needs no second
-approval. Plugin rows in Settings carry a "Plugin" badge, so an external
-provider never reads as a built-in.
+name, the full exec command line (and the sign-in command, if any), and a
+SHA-256 over the **whole plugin directory** — every file, in path order, by
+content. The row also offers to open the manifest and reveal the plugin
+folder, so the decision can be made from the files themselves, not from the
+plugin's own description of them. Enabling it approves that exact directory:
+any change to any file in it re-pends the plugin. The approval is kept in the
+user's keychain, where no other process can write it, and it lives exactly as
+long as the plugin directory does — deleting the directory forgets it, and
+*Revoke…* on the plugin's settings row forgets it while leaving the files in
+place. Reinstalling identical bytes asks again.
+
+Plugin rows carry a "Plugin" badge in Settings; in the notch the ring wears a
+puzzle-piece mark, the tooltip and reset card a "Plugin" capsule beside the
+title, and notifications name the provider "… (plugin)". An external provider
+never reads as a built-in.
 
 The plugins directory, each plugin directory, and each `plugin.json` must be
 owned by the user, must not be symlinks, and must not be group- or
-world-writable; anything else is skipped. Executables may additionally be
-root-owned (system binaries like `/bin/sh` are legitimate plugin targets) but
-the same symlink and writability rules apply.
+world-writable; anything else is skipped. Every executable a manifest names
+(`exec.path`, `signIn.run[0]`) must be a regular file, not a symlink, not
+group/world-writable, and must either live **inside the plugin directory**,
+where the hash covers it, or be **root-owned** (`/bin/sh`, `/usr/bin/python3`)
+— a user-owned binary anywhere else is refused, because the hash could not see
+it change. `/usr/bin/env` is refused: it finds its program on PATH. Absolute
+paths among the arguments must stay inside the plugin directory; the child
+runs with the plugin directory as its working directory, so `run.sh` and
+`<plugin dir>/run.sh` both mean the pinned file. Wrap a vendor CLI that lives
+elsewhere (a Homebrew or npm install) in a script inside the plugin directory
+— that wrapper is what the approval pins and what the user reads.
 
-The watcher covers the plugins root and one subdirectory level, so manifest
-edits and in-tree binary swaps are detected within about half a second. An
-exec binary outside the plugin tree (or nested deeper) that is overwritten in
-place is caught at the next launch scan — and the approval pins the bytes as
-they are at approval time, so a swapped binary re-pends rather than runs.
+The plugin directory is immutable by contract: anything written into it
+after approval — a cache, a log — changes the hash and re-pends the plugin.
+`.DS_Store` is the one file ignored. The directory is re-checked immediately
+before every run (trust, validation, hash against the approval); a mismatch
+refuses to run and re-pends. The watcher covers the plugins root and one
+subdirectory level, so most edits show in Settings within about half a
+second; the rest are caught at the next poll.
 
 For development the root can be overridden with the `CODENOTCH_PLUGINS_DIR`
 environment variable, in debug builds only.
@@ -77,15 +94,15 @@ environment variable, in debug builds only.
 |---|---|---|
 | `schema` | yes | Must be `1`. |
 | `id` | yes | `^[a-z0-9][a-z0-9-]*$`, ≤ 64 chars. The join key for ordering, connection state, archive, notifications. Must be stable across releases and must not equal a built-in provider id. |
-| `displayName` | yes | Shown in the notch tooltip and the settings row. 1–40 characters, no control characters, and no case-insensitive match for a built-in provider's name (compared after trimming). |
+| `displayName` | yes | Shown in the notch tooltip and the settings row. 1–40 characters, no control characters, and not a built-in provider's name — compared as a skeleton, so lookalike scripts, accents, digits and invisible characters do not get "Claude" past the check. |
 | `version` | yes | Free-form, for diagnostics. |
-| `exec.path` | yes | Absolute path to an executable that exists, is executable, and passes the trust check (not a symlink, not group/world-writable, owned by the user or root). |
-| `exec.args` | yes | Arguments producing the snapshot payload on stdout. |
+| `exec.path` | yes | Absolute path to an executable that exists, is executable, and passes the trust check (not a symlink, not group/world-writable) — inside the plugin directory, or root-owned. Not `/usr/bin/env`. |
+| `exec.args` | yes | Arguments producing the snapshot payload on stdout. Absolute paths must stay inside the plugin directory; relative paths resolve there. |
 | `exec.timeoutSeconds` | no | Default 20, clamped to 30. On expiry the plugin gets SIGTERM, then SIGKILL 2 s later; the reading degrades to stale. |
 | `glyph.image` | no | Image file inside the plugin directory (PNG or PDF); the path must resolve — after `..` and symlink resolution — to a file inside that directory. Monochrome mark rendered as a template, per `docs/design/provider-assets.md`. Without it a generic puzzle-piece symbol is drawn. |
 | `glyph.opticalScale` | no | Default 1.0 — even the mark's ink out with the built-ins (see `ProviderGlyph.opticalScale`). |
 | `signIn.guidance` | no | Shown on the settings row when the provider reports `needsAuth`. |
-| `signIn.run` | no | Command spawned detached when the user clicks Sign in on the row. The executable is validated like `exec` (absolute, existing, executable, trusted). |
+| `signIn.run` | no | Command spawned detached when the user clicks Sign in on the row. Validated exactly like `exec` — executable placement and argument containment included — and shown on the approval row. |
 | `activity` | no | Attach a live-activity monitor so sessions spin this provider's ring. Currently one type: `claudeSessions` with `configDir` (Claude Code config directory; `~` is expanded). |
 
 Validation failures are logged and the plugin is skipped; one bad manifest
@@ -102,9 +119,10 @@ for both `exec` and `signIn.run`:
 | `HOME`, `USER`, `LOGNAME`, `TMPDIR` | the user's own |
 | `LANG` | `en_US.UTF-8` |
 
-stdin is `/dev/null`. stdout is capped at 1 MiB and stderr at 64 KiB; crossing
-either cap SIGKILLs the plugin and fails the fetch — a flooded stdout drops the
-reading as a bad response, a flooded stderr reports as the plugin's error.
+stdin is `/dev/null`; the working directory is the plugin directory. stdout is
+capped at 1 MiB and stderr at 64 KiB; crossing either cap SIGKILLs the plugin
+and fails the fetch — a flooded stdout drops the reading as a bad response, a
+flooded stderr reports as the plugin's error.
 
 ## Snapshot payload (stdout, exit 0)
 
@@ -154,6 +172,13 @@ reading as a bad response, a flooded stderr reports as the plugin's error.
 The provider id, display name and glyph always come from the **manifest**, not
 the payload — a plugin cannot rename itself under its settings row.
 
+The payload is bounded rather than trusted: at most 16 windows are read; ids,
+labels, groups, currencies and plan names are cut to 64 characters, free text
+(`usedText`, `detail`, account fields) to 200; `usedFraction` is clamped to
+0…10, money to 0…10⁹, counts to ≥ 0; NaN and infinities are dropped;
+`resetsAt` and `duration` more than a year from now are dropped;
+`retryAfterSeconds` is clamped to 1…3600.
+
 ## Exit codes
 
 | code | meaning | Codenotch behaviour |
@@ -169,8 +194,9 @@ stdout must contain only the payload — log to stderr.
 ## Conventions
 
 - **Stateless invocations.** Each `exec` call is independent. Cache in the
-  plugin's own directory (or the vendor's config home) when the upstream API
-  needs mercy — never in Codenotch's directories.
+  vendor's config home or `$TMPDIR` when the upstream API needs mercy — never
+  in the plugin directory (that re-pends the plugin) and never in Codenotch's
+  directories.
 - **Never block on interaction.** No prompts on stdin/stdout; stdin is
   `/dev/null`. Anything interactive belongs in the vendor's own CLI, reachable
   from `signIn.run`.
@@ -181,5 +207,6 @@ stdout must contain only the payload — log to stderr.
 ## Unregistration
 
 Delete the plugin directory (the vendor's uninstaller should). Codenotch drops
-the provider, its cells and its archived reading; the ordering slot is
-remembered, so reinstalling returns the ring to its place.
+the provider, its cells, its archived reading and its approval; the ordering
+slot is remembered, so a reinstall — once approved again — returns the ring to
+its place.
