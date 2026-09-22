@@ -343,8 +343,8 @@ up while running — ring, tooltip, settings row, alerts and ordering all behave
 exactly as they do for a built-in provider. The manifest, wire format and exit
 codes are specified in [`docs/design/plugin-protocol.md`](docs/design/plugin-protocol.md);
 the trust model — approval in Settings pinned to a hash of the plugin folder,
-kept in the keychain — in
-[`docs/superpowers/specs/2026-09-19-plugin-hardening-design.md`](docs/superpowers/specs/2026-09-19-plugin-hardening-design.md).
+kept in the data-protection keychain — under *What the approval guarantees*
+in the same document.
 
 Plugins live with their vendors, not in this repo. The reference
 implementation ships in the [CodeMie CLI](https://github.com/codemie-ai/codemie-code):
