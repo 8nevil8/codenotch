@@ -51,11 +51,33 @@ enum PluginTrust {
 
     /// Whether `path` lies inside `directory` once `..` and every symlink on
     /// both sides are resolved — the containment check the glyph, the
-    /// executables and the absolute arguments all share.
+    /// executables and every argument share.
     static func isInside(_ path: String, directory: URL) -> Bool {
-        let root = directory.standardizedFileURL.resolvingSymlinksInPath().path
-        let resolved = URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
-        return resolved.hasPrefix(root + "/")
+        let root = canonical(directory.path)
+        return canonical(path).hasPrefix(root + "/")
+    }
+
+    /// The path with `..` collapsed and symlinks resolved in every component
+    /// that exists. `resolvingSymlinksInPath` leaves a path alone when its
+    /// last component is missing, so `<dir>/lib/run.sh` with `lib` a symlink
+    /// and `run.sh` not yet written would compare unresolved against a
+    /// resolved root — and `/private/var` against `/var`, since that
+    /// resolution also drops the `/private` prefix. Resolving the longest
+    /// existing prefix and re-appending the rest keeps both sides in the
+    /// same form.
+    private static func canonical(_ path: String) -> String {
+        var existing = URL(fileURLWithPath: path).standardizedFileURL
+        var missing: [String] = []
+        while existing.path != "/",
+              (try? FileManager.default.attributesOfItem(atPath: existing.path)) == nil {
+            missing.insert(existing.lastPathComponent, at: 0)
+            existing = existing.deletingLastPathComponent()
+        }
+        var resolved = existing.resolvingSymlinksInPath()
+        for component in missing {
+            resolved.appendPathComponent(component)
+        }
+        return resolved.standardizedFileURL.path
     }
 
     private static func isOwnedAndNotShared(_ url: URL, allowedOwners: [uid_t],

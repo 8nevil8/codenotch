@@ -289,4 +289,30 @@ struct ExternalPluginProviderTests {
         }
         #expect(Date().timeIntervalSince(started) < 10)
     }
+
+    @Test func presentSignInRunsInThePluginDirectory() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ExternalPluginProviderTests.\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let marker = directory.appendingPathComponent("cwd.txt")
+        let manifest = PluginManifest(
+            schema: 1, id: "p", displayName: "P", version: "1",
+            exec: PluginManifest.Exec(path: "/bin/sh", args: [], timeoutSeconds: nil),
+            glyph: nil,
+            signIn: PluginManifest.SignIn(guidance: "g", run: ["/bin/sh", "-c", "pwd > '\(marker.path)'"]),
+            activity: nil)
+        let plugin = PluginRegistry.RegisteredPlugin(manifest: manifest, directory: directory, contentHash: "x")
+        let provider = ExternalPluginProvider(plugin: plugin, verify: { true }, onTamper: {})
+
+        provider.presentSignIn()
+
+        let deadline = Date().addingTimeInterval(5)
+        while !FileManager.default.fileExists(atPath: marker.path), Date() < deadline {
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        let printed = try String(contentsOf: marker, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(URL(fileURLWithPath: printed).resolvingSymlinksInPath().path
+                == directory.resolvingSymlinksInPath().path)
+    }
 }

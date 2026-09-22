@@ -262,4 +262,14 @@ struct PluginCoordinatorTests {
         #expect(!store.knownIDs.contains("codemie-budget"))
         #expect(!preferences.isConnected("codemie-budget"))
     }
+
+    @Test func theCommandLineQuotesArgumentsSoWordBoundariesAreUnambiguous() {
+        let plugin = PluginCoordinator.PendingPlugin(
+            id: "p", displayName: "P", execPath: "/bin/sh",
+            execArgs: ["-c", "echo hi", "it's", "plain-arg_1.sh"],
+            contentHash: "abc", directory: URL(fileURLWithPath: "/tmp/p"),
+            signInCommand: ["/bin/sh", "login me"])
+        #expect(plugin.commandLine == #"/bin/sh -c 'echo hi' 'it'\''s' plain-arg_1.sh"#)
+        #expect(plugin.signInCommandLine == "/bin/sh 'login me'")
+    }
 }

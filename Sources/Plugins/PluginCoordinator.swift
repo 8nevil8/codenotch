@@ -23,12 +23,28 @@ final class PluginCoordinator {
         /// one — shown for the same reason the exec line is.
         var signInCommand: [String]? = nil
 
+        /// What would run, printed the way a shell would need it typed:
+        /// each word quoted when it holds anything beyond plain path and
+        /// option characters, so a space inside one argument cannot read as
+        /// two, and `-c 'curl … | sh'` is visibly one script.
         var commandLine: String {
-            ([execPath] + execArgs).joined(separator: " ")
+            Self.render([execPath] + execArgs)
         }
 
         var signInCommandLine: String? {
-            signInCommand?.joined(separator: " ")
+            signInCommand.map(Self.render)
+        }
+
+        static func render(_ words: [String]) -> String {
+            words.map(shellQuoted).joined(separator: " ")
+        }
+
+        private static let bareWord = CharacterSet.alphanumerics
+            .union(CharacterSet(charactersIn: "-_./=:@%+,"))
+
+        static func shellQuoted(_ word: String) -> String {
+            guard word.isEmpty || !word.unicodeScalars.allSatisfy(bareWord.contains) else { return word }
+            return "'" + word.replacingOccurrences(of: "'", with: "'\\''") + "'"
         }
 
         var shortHash: String { String(contentHash.prefix(12)) }

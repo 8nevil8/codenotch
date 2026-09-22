@@ -81,9 +81,11 @@ struct PluginManifest: Codable, Equatable, Sendable {
         /// A user-owned executable outside the plugin directory: not covered
         /// by the content hash, so not something an approval could pin.
         case execOutsidePluginDirectory(String)
-        /// `env`, which finds its real program on PATH — a lookup the hash
-        /// cannot see and the user cannot read off the command line.
-        case execResolvesThroughPATH(String)
+        /// A root-owned executable outside the plugin directory that is not
+        /// on `PluginManifest.interpreterAllowlist`: `env` resolves through
+        /// PATH, `zsh` sources `~/.zshenv`, `python3` imports the user site's
+        /// `usercustomize` — code the hash never sees.
+        case execNotAllowlisted(String)
         case glyphMissing(String)
         case glyphEscapesPluginDirectory(String)
         case signInNotAbsolute(String)
@@ -91,13 +93,33 @@ struct PluginManifest: Codable, Equatable, Sendable {
         case signInNotExecutable(String)
         case signInUntrusted(String)
         case signInOutsidePluginDirectory(String)
-        case signInResolvesThroughPATH(String)
+        case signInNotAllowlisted(String)
         /// An absolute path among the arguments that leaves the plugin
         /// directory: for `/bin/sh script` that is the code, and it has to be
         /// where the hash covers it.
         case argumentOutsidePluginDirectory(String)
         case unknownActivity(String)
+        /// A character outside printable ASCII in the command line — a
+        /// newline that hides the rest of the command below the approval
+        /// row, a bidirectional override that reverses it, a lookalike
+        /// letter that names a different file than the one the row shows.
+        case malformedArgument(String)
     }
+
+    /// The root-owned executables a manifest may name from outside the plugin
+    /// directory. Being root-owned keeps the binary itself out of the user's
+    /// reach; what it *reads* to decide what to run has to be out of reach
+    /// too, and with HOME in the child's environment most interpreters read
+    /// something user-writable: zsh sources `~/.zshenv`, python3 imports the
+    /// user site's `usercustomize.py`, `env` walks a PATH with Homebrew on
+    /// it, `open` asks LaunchServices — whose registrations and default
+    /// handlers the user's processes set — what `-a Helper` or `report.txt`
+    /// means. These do not: a non-interactive `sh`/`bash` reads no startup
+    /// file, and osascript loads nothing the script does not name. Anything
+    /// else lives in the tree.
+    static let interpreterAllowlist: Set<String> = [
+        "/bin/sh", "/bin/bash", "/usr/bin/osascript",
+    ]
 
     /// `builtInIDs` and `builtInDisplayNames` are supplied by the caller because
     /// the built-in set lives in `AppDelegate`, and a manifest validator has no
@@ -125,22 +147,24 @@ struct PluginManifest: Codable, Equatable, Sendable {
         guard !builtInDisplayNames.contains(where: { Self.skeleton($0) == skeleton }) else {
             throw ValidationError.impersonatesBuiltIn(displayName)
         }
+        try Self.validateCommandLine([exec.path] + exec.args)
         try Self.validateExecutable(exec.path, pluginDirectory: pluginDirectory, fileManager: fileManager,
                                     notAbsolute: { ValidationError.execNotAbsolute($0) },
                                     missing: { ValidationError.execMissing($0) },
                                     notExecutable: { ValidationError.execNotExecutable($0) },
                                     untrusted: { ValidationError.execUntrusted($0) },
                                     outside: { ValidationError.execOutsidePluginDirectory($0) },
-                                    throughPATH: { ValidationError.execResolvesThroughPATH($0) })
+                                    notAllowlisted: { ValidationError.execNotAllowlisted($0) })
         try Self.validateArguments(exec.args, pluginDirectory: pluginDirectory)
         if let run = signIn?.run, let executable = run.first {
+            try Self.validateCommandLine(run)
             try Self.validateExecutable(executable, pluginDirectory: pluginDirectory, fileManager: fileManager,
                                         notAbsolute: { ValidationError.signInNotAbsolute($0) },
                                         missing: { ValidationError.signInMissing($0) },
                                         notExecutable: { ValidationError.signInNotExecutable($0) },
                                         untrusted: { ValidationError.signInUntrusted($0) },
                                         outside: { ValidationError.signInOutsidePluginDirectory($0) },
-                                        throughPATH: { ValidationError.signInResolvesThroughPATH($0) })
+                                        notAllowlisted: { ValidationError.signInNotAllowlisted($0) })
             try Self.validateArguments(Array(run.dropFirst()), pluginDirectory: pluginDirectory)
         }
         if let glyph {
@@ -233,7 +257,7 @@ struct PluginManifest: Codable, Equatable, Sendable {
         notExecutable: (String) -> ValidationError,
         untrusted: (String) -> ValidationError,
         outside: (String) -> ValidationError,
-        throughPATH: (String) -> ValidationError
+        notAllowlisted: (String) -> ValidationError
     ) throws {
         guard path.hasPrefix("/") else { throw notAbsolute(path) }
         var isDirectory: ObjCBool = false
@@ -246,21 +270,39 @@ struct PluginManifest: Codable, Equatable, Sendable {
         else { throw untrusted(path) }
         guard !PluginTrust.isInside(path, directory: pluginDirectory) else { return }
         guard PluginTrust.isOwnedByRoot(url, fileManager: fileManager) else { throw outside(path) }
-        // `/usr/bin/env node …` runs whatever `node` is first on the child's
-        // PATH — which includes Homebrew's user-writable bin — so the pinned
-        // executable would not be the one that runs.
-        guard url.lastPathComponent != "env" else { throw throughPATH(path) }
+        guard interpreterAllowlist.contains(path) else { throw notAllowlisted(path) }
     }
 
-    /// Absolute paths among the arguments must stay inside the plugin
-    /// directory. Relative ones are resolved there too — the child runs with
-    /// the plugin directory as its working directory — so `script.sh` and
-    /// `<plugin dir>/script.sh` are both fine, and `/Users/me/other.sh` is
-    /// not: a script an interpreter runs is code, and code lives where the
-    /// hash sees it.
+    /// Every word of a command line is printed on the approval row as the
+    /// thing the user is agreeing to run, so every character in it must be
+    /// one the row shows for what it is: printable ASCII. That rules out
+    /// controls (a newline that hides the rest of the command below the
+    /// row), format characters (a bidirectional override that reverses it)
+    /// and lookalikes (`рun.sh` with a Cyrillic р, which reads as `run.sh`
+    /// and is a different file). Scripts may hold any text they like; the
+    /// words that name them may not.
+    private static func validateCommandLine(_ words: [String]) throws {
+        for word in words {
+            guard word.utf8.allSatisfy({ (0x20...0x7E).contains($0) }) else {
+                throw ValidationError.malformedArgument(word)
+            }
+        }
+    }
+
+    /// Every argument, read as a path, must stay inside the plugin directory.
+    /// The child runs with the plugin directory as its working directory, so
+    /// a relative argument is resolved there: `script.sh` and
+    /// `<plugin dir>/script.sh` are both fine; `/Users/me/other.sh`,
+    /// `../other.sh` and `lib/other.sh` through a symlink that leaves the
+    /// directory are not. A script an interpreter runs is code, and code
+    /// lives where the hash sees it. Words that are not paths (`-c`,
+    /// `--json`) resolve to a name inside the directory and pass.
     private static func validateArguments(_ arguments: [String], pluginDirectory: URL) throws {
-        for argument in arguments where argument.hasPrefix("/") {
-            guard PluginTrust.isInside(argument, directory: pluginDirectory) else {
+        for argument in arguments where !argument.isEmpty {
+            let path = argument.hasPrefix("/")
+                ? argument
+                : pluginDirectory.appendingPathComponent(argument).path
+            guard PluginTrust.isInside(path, directory: pluginDirectory) else {
                 throw ValidationError.argumentOutsidePluginDirectory(argument)
             }
         }

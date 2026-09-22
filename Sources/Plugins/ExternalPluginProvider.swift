@@ -69,6 +69,10 @@ actor ExternalPluginProvider: UsageProvider {
     }
 
     let manifest: PluginManifest
+    /// The plugin's folder, the working directory of everything it spawns —
+    /// the poll and the sign-in alike, so a relative script name means the
+    /// same hashed file in both. Nil only for injected test runners.
+    nonisolated let directory: URL?
     /// How the process is run. Injected for the same reason
     /// `ClaudeUsageCLI.output` is: a test that spawned real executables would
     /// be slow and machine-dependent, and the part worth testing — what the
@@ -103,6 +107,7 @@ actor ExternalPluginProvider: UsageProvider {
          verify: @escaping @Sendable () -> Bool,
          onTamper: @escaping @Sendable () -> Void) {
         self.manifest = plugin.manifest
+        self.directory = plugin.directory
         self.run = { try await Self.spawn(manifest: $0, directory: plugin.directory) }
         self.verify = verify
         self.onTamper = onTamper
@@ -117,6 +122,7 @@ actor ExternalPluginProvider: UsageProvider {
          onTamper: @escaping @Sendable () -> Void = {},
          run: @escaping @Sendable (PluginManifest) async throws -> ExecResult) {
         self.manifest = manifest
+        self.directory = nil
         self.run = run
         self.verify = verify
         self.onTamper = onTamper
@@ -181,6 +187,7 @@ actor ExternalPluginProvider: UsageProvider {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = Array(command.dropFirst())
+        process.currentDirectoryURL = directory
         process.environment = Self.childEnvironment
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice

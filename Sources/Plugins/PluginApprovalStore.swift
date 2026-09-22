@@ -6,10 +6,18 @@ import Foundation
 /// running as the user — the same adversary that can drop a manifest into the
 /// plugins folder — so an approval kept there is forgeable with one
 /// `defaults write`, and the consent step it exists to enforce could be
-/// skipped end to end. The keychain item is ACL'd to this app's signing
-/// identity: another process can list its attributes, and can even file a
-/// second item under the same name, but cannot read or write *ours* without
-/// macOS putting up a dialogue that names Codenotch.
+/// skipped end to end.
+///
+/// Not in the login keychain either. The same adversary can delete our item
+/// there without a prompt and file its own under our name with an ACL any
+/// application may read, and every attribute of that item — the partition
+/// entry that names its creator included — is written by the client that
+/// creates it. Only the **data-protection keychain** answers this: its items
+/// sit in an access group that securityd ties to the caller's entitlements,
+/// which no process outside this team can carry. A build without that
+/// entitlement (ad-hoc, unsigned, or signed without a profile that grants
+/// it) keeps no approvals at all: every plugin asks again at each launch,
+/// which is the safe answer and a visible one.
 protocol PluginApprovalStore: AnyObject {
     /// Plugin id → the approved content hash. Empty when nothing is approved,
     /// and empty — fail closed — whenever the store cannot vouch for what it
@@ -36,29 +44,22 @@ final class KeychainPluginApprovalStore: PluginApprovalStore {
     static let account = "approvals"
 
     func load() -> [String: String] {
-        // Two items under our name means something other than this app filed
-        // one, and "the newest" could be the impostor's. Nothing is approved
-        // until the duplicate is gone — a re-pend, never a bypass.
-        let matches = KeychainItem.matches(service: Self.service, account: Self.account)
-        guard matches.count <= 1 else {
-            Log.usage.error("plugin approvals: \(matches.count) keychain items under one name, refusing all")
+        guard DataProtectionKeychain.isAvailable else {
+            Log.usage.error("plugin approvals: this build has no data-protection keychain entitlement; approvals are not kept between launches")
             return [:]
         }
-        guard let text = KeychainItem.read(service: Self.service, account: Self.account) else { return [:] }
+        guard let text = DataProtectionKeychain.read(service: Self.service, account: Self.account) else { return [:] }
         return Self.decode(text)
     }
 
     func save(_ approvals: [String: String]) {
-        guard KeychainItem.matches(service: Self.service, account: Self.account).count <= 1 else {
-            Log.usage.error("plugin approvals: duplicate keychain items, not saving")
-            return
-        }
+        guard DataProtectionKeychain.isAvailable else { return }
         if approvals.isEmpty {
-            KeychainItem.delete(service: Self.service, account: Self.account)
+            DataProtectionKeychain.delete(service: Self.service, account: Self.account)
             return
         }
         guard let text = Self.encode(approvals),
-              KeychainItem.store(service: Self.service, account: Self.account, value: text)
+              DataProtectionKeychain.store(service: Self.service, account: Self.account, value: text)
         else {
             Log.usage.error("plugin approvals: keychain write failed")
             return

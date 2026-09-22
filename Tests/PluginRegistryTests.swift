@@ -372,4 +372,43 @@ struct PluginRegistryTests {
         func removedIDs() -> [String] { lock.withLock { removed } }
         func isEmpty() -> Bool { lock.withLock { added.isEmpty && removed.isEmpty } }
     }
+
+    // MARK: - Symlinks inside the plugin directory
+
+    @Test func scanSkipsAPluginWhoseSymlinkLeavesTheDirectory() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let elsewhere = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: elsewhere) }
+        let directory = try writePlugin("codemie-budget", in: root)
+        // Whatever `lib` points at is not in the hash, so nothing the
+        // plugin runs through it is pinned.
+        try FileManager.default.createSymbolicLink(
+            at: directory.appendingPathComponent("lib"), withDestinationURL: elsewhere)
+        let registry = PluginRegistry(directory: root, builtInIDs: { [] })
+        #expect(registry.scan().isEmpty)
+    }
+
+    @Test func scanAcceptsASymlinkThatStaysInsideTheDirectory() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = try writePlugin("codemie-budget", in: root)
+        // `node_modules/.bin` style: the target is in the hash too.
+        try FileManager.default.createSymbolicLink(
+            at: directory.appendingPathComponent("icon.png"),
+            withDestinationURL: directory.appendingPathComponent("glyph.png"))
+        let registry = PluginRegistry(directory: root, builtInIDs: { [] })
+        #expect(registry.scan().count == 1)
+    }
+
+    @Test func scanSkipsAPluginContainingANonRegularFile() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let directory = try writePlugin("codemie-budget", in: root)
+        // A FIFO with no writer blocks any reader forever; the hash must
+        // refuse the entry rather than read it.
+        #expect(mkfifo(directory.appendingPathComponent("pipe").path, 0o600) == 0)
+        let registry = PluginRegistry(directory: root, builtInIDs: { [] })
+        #expect(registry.scan().isEmpty)
+    }
 }

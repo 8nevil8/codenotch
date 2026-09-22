@@ -33,8 +33,11 @@ content. The row also offers to open the manifest and reveal the plugin
 folder, so the decision can be made from the files themselves, not from the
 plugin's own description of them. Enabling it approves that exact directory:
 any change to any file in it re-pends the plugin. The approval is kept in the
-user's keychain, where no other process can write it, and it lives exactly as
-long as the plugin directory does — deleting the directory forgets it, and
+data-protection keychain, in an access group only code signed by this app's
+team can reach — no other process can file, read or replace it. (A build
+without that entitlement keeps no approvals between launches.) It lives
+exactly as long as
+the plugin directory does — deleting the directory forgets it, and
 *Revoke…* on the plugin's settings row forgets it while leaving the files in
 place. Reinstalling identical bytes asks again.
 
@@ -48,14 +51,28 @@ owned by the user, must not be symlinks, and must not be group- or
 world-writable; anything else is skipped. Every executable a manifest names
 (`exec.path`, `signIn.run[0]`) must be a regular file, not a symlink, not
 group/world-writable, and must either live **inside the plugin directory**,
-where the hash covers it, or be **root-owned** (`/bin/sh`, `/usr/bin/python3`)
-— a user-owned binary anywhere else is refused, because the hash could not see
-it change. `/usr/bin/env` is refused: it finds its program on PATH. Absolute
-paths among the arguments must stay inside the plugin directory; the child
-runs with the plugin directory as its working directory, so `run.sh` and
-`<plugin dir>/run.sh` both mean the pinned file. Wrap a vendor CLI that lives
-elsewhere (a Homebrew or npm install) in a script inside the plugin directory
-— that wrapper is what the approval pins and what the user reads.
+where the hash covers it, or be one of **`/bin/sh`, `/bin/bash`,
+`/usr/bin/osascript`** — root-owned system executables that consult nothing
+user-writable to decide what to run. Other root-owned programs do:
+`/bin/zsh` sources `~/.zshenv`, `/usr/bin/python3` imports the user site's
+`usercustomize.py`, `/usr/bin/env` resolves through a PATH with Homebrew on
+it, `/usr/bin/open` asks LaunchServices — code or choices the hash never
+sees, so they are refused, as is a user-owned binary anywhere outside the
+directory. A sign-in that needs a browser opens it from a script in the
+tree. Every argument, read as a path, must stay inside the plugin
+directory: the child runs with the plugin directory as its working
+directory (the poll and the sign-in alike), so `run.sh` and
+`<plugin dir>/run.sh` both mean the pinned file, and `../run.sh`,
+`/Users/me/run.sh` or `lib/run.sh` through a symlink that leaves the
+directory are refused. A symlink inside the directory may only point back
+inside it. Every word of the command line is printable ASCII (no newlines
+or tabs, no bidirectional overrides, no lookalike letters from other
+scripts): the approval row prints the command line, each word
+shell-quoted, as the thing being agreed to, and must show it for what it is.
+Wrap a vendor CLI that lives elsewhere (a Homebrew or npm install) in a
+script inside the plugin directory — that wrapper is what the approval pins
+and what the user reads; what the wrapper goes on to run is the vendor's
+code, and the approval cannot pin it.
 
 The plugin directory is immutable by contract: anything written into it
 after approval — a cache, a log — changes the hash and re-pends the plugin.
@@ -96,8 +113,8 @@ environment variable, in debug builds only.
 | `id` | yes | `^[a-z0-9][a-z0-9-]*$`, ≤ 64 chars. The join key for ordering, connection state, archive, notifications. Must be stable across releases and must not equal a built-in provider id. |
 | `displayName` | yes | Shown in the notch tooltip and the settings row. 1–40 characters, no control characters, and not a built-in provider's name — compared as a skeleton, so lookalike scripts, accents, digits and invisible characters do not get "Claude" past the check. |
 | `version` | yes | Free-form, for diagnostics. |
-| `exec.path` | yes | Absolute path to an executable that exists, is executable, and passes the trust check (not a symlink, not group/world-writable) — inside the plugin directory, or root-owned. Not `/usr/bin/env`. |
-| `exec.args` | yes | Arguments producing the snapshot payload on stdout. Absolute paths must stay inside the plugin directory; relative paths resolve there. |
+| `exec.path` | yes | Absolute path to an executable that exists, is executable, and passes the trust check (not a symlink, not group/world-writable) — inside the plugin directory, or one of `/bin/sh`, `/bin/bash`, `/usr/bin/osascript`. |
+| `exec.args` | yes | Arguments producing the snapshot payload on stdout. Every argument, read as a path, must stay inside the plugin directory (relative ones resolve there); printable ASCII only. |
 | `exec.timeoutSeconds` | no | Default 20, clamped to 30. On expiry the plugin gets SIGTERM, then SIGKILL 2 s later; the reading degrades to stale. |
 | `glyph.image` | no | Image file inside the plugin directory (PNG or PDF); the path must resolve — after `..` and symlink resolution — to a file inside that directory. Monochrome mark rendered as a template, per `docs/design/provider-assets.md`. Without it a generic puzzle-piece symbol is drawn. |
 | `glyph.opticalScale` | no | Default 1.0 — even the mark's ink out with the built-ins (see `ProviderGlyph.opticalScale`). |
@@ -123,6 +140,26 @@ stdin is `/dev/null`; the working directory is the plugin directory. stdout is
 capped at 1 MiB and stderr at 64 KiB; crossing either cap SIGKILLs the plugin
 and fails the fetch — a flooded stdout drops the reading as a bad response, a
 flooded stderr reports as the plugin's error.
+
+### What the approval guarantees
+
+Nothing registers without a click in Settings. The click pins every file in
+the plugin directory and the out-of-tree interpreter it names, and any change
+to those asks again. The approval record lives in the data-protection
+keychain, which no process outside this app's signing team can file, read or
+replace — where the build carries the `keychain-access-groups` entitlement
+(`$(AppIdentifierPrefix)com.vinz.codenotch`, and for Developer ID a
+provisioning profile that grants it). A build without it keeps no approvals
+between launches: every plugin asks again, and one log line at launch says
+why. There is no fallback to the login keychain — every attribute of an item
+there, the entry naming its creator included, is written by whoever creates
+it, so it cannot say who did.
+
+What the approval cannot guarantee: what an in-tree wrapper goes on to run
+(a wrapper around a Homebrew or npm install runs whatever is installed
+there), and the window between the pre-run hash and the spawn, where a
+tamper that lands is one poll's worth of code and a tamper that misses
+re-pends the plugin.
 
 ## Snapshot payload (stdout, exit 0)
 

@@ -65,7 +65,11 @@ final class PluginRegistry {
 
     /// SHA-256 over the whole plugin directory: every entry in path order,
     /// each as its relative path, its kind, and — for a file — its size and
-    /// bytes, for a symlink its target. The manifest is one of those files,
+    /// bytes, for a symlink its target. A symlink may only point back inside
+    /// the directory (`node_modules/.bin` style), where its target's bytes
+    /// are in the hash too; one that leaves it makes the directory
+    /// unhashable, because whatever runs through it is not pinned. The
+    /// manifest is one of those files,
     /// and so is any script the manifest's executable runs, which is why
     /// executables and absolute arguments are confined to the directory:
     /// the hash covers all the code Codenotch hands to the kernel, not just
@@ -98,7 +102,8 @@ final class PluginRegistry {
             hasher.update(data: Data(entry.relative.utf8))
             hasher.update(data: Data([0]))
             if values.isSymbolicLink == true {
-                guard let target = try? fileManager.destinationOfSymbolicLink(atPath: entry.url.path)
+                guard let target = try? fileManager.destinationOfSymbolicLink(atPath: entry.url.path),
+                      PluginTrust.isInside(entry.url.path, directory: root)
                 else { return nil }
                 hasher.update(data: Data("link\0\(target)\0".utf8))
             } else if values.isDirectory == true {
@@ -186,7 +191,7 @@ final class PluginRegistry {
                                                    pluginDirectory: pluginDirectory,
                                                    fileManager: fileManager)
             guard let hash = Self.contentHash(pluginDirectory: pluginDirectory, fileManager: fileManager) else {
-                Log.usage.error("plugin \(name, privacy: .public) skipped: directory unreadable")
+                Log.usage.error("plugin \(name, privacy: .public) skipped: directory unreadable, or a symlink in it leaves it")
                 return nil
             }
             return RegisteredPlugin(manifest: validated, directory: pluginDirectory, contentHash: hash)
