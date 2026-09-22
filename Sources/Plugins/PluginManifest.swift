@@ -53,13 +53,21 @@ struct PluginManifest: Codable, Equatable, Sendable {
     static let idLengthLimit = 64
     static let displayNameLengthLimit = 40
 
-    /// Ids join ordering, connection state, archives and notifications, so
-    /// they get the same character set as the built-ins' slugs:
-    /// `^[a-z0-9][a-z0-9-]*$`. Written on bytes so no Unicode lookalike
-    /// squeezes through a character-class check.
+    /// The namespace every plugin id lives in. No built-in will ever be
+    /// called `plugin-…`, so a plugin cannot take an id a later built-in
+    /// wants — and the ids join ordering, connection state, archives and
+    /// notifications, where such a collision would be permanent.
+    static let idPrefix = "plugin-"
+
+    /// `plugin-` followed by a slug in the built-ins' character set:
+    /// `^plugin-[a-z0-9][a-z0-9-]*$`, at most `idLengthLimit` in all.
+    /// Written on bytes so no Unicode lookalike squeezes through a
+    /// character-class check.
     static func isValidID(_ id: String) -> Bool {
-        guard (1...idLengthLimit).contains(id.count) else { return false }
-        for (index, byte) in id.utf8.enumerated() {
+        guard (1...idLengthLimit).contains(id.count), id.hasPrefix(idPrefix) else { return false }
+        let slug = id.dropFirst(idPrefix.count)
+        guard !slug.isEmpty else { return false }
+        for (index, byte) in slug.utf8.enumerated() {
             let isLower = byte >= 97 && byte <= 122
             let isDigit = byte >= 48 && byte <= 57
             let isHyphen = byte == 45

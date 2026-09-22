@@ -106,6 +106,13 @@ final class PluginCoordinator {
         registry.stop()
     }
 
+    /// Re-check every plugin against the built-in set as it stands now —
+    /// asked for when that set changes, so a plugin whose id or name a new
+    /// custom endpoint has taken is dropped rather than kept until relaunch.
+    func rescan() {
+        registry.requestRescan()
+    }
+
     /// Pin the pending plugin's current hash and register it. Approving is
     /// the only path that connects a plugin: there is no auto-connect.
     func approve(pluginID: String) {

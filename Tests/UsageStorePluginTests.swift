@@ -26,10 +26,10 @@ struct UsageStorePluginTests {
         defer { cleanup(suite) }
         #expect(store.snapshots.isEmpty)
 
-        let plugin = Stub(id: "codemie-budget")
+        let plugin = Stub(id: "plugin-codemie-budget")
         store.register(plugin)
 
-        #expect(store.snapshots.map(\.id) == ["codemie-budget"])
+        #expect(store.snapshots.map(\.id) == ["plugin-codemie-budget"])
         #expect(!store.snapshots[0].hasReading, "a placeholder is not a reading")
 
         await store.refresh()
@@ -43,7 +43,7 @@ struct UsageStorePluginTests {
         store.register(Stub(id: "stub-tool"))
 
         let manifest = PluginManifest(
-            schema: 1, id: "codemie-budget", displayName: "CodeMie Budget", version: "0.1.0",
+            schema: 1, id: "plugin-codemie-budget", displayName: "CodeMie Budget", version: "0.1.0",
             exec: PluginManifest.Exec(path: "/bin/sh", args: [], timeoutSeconds: nil),
             glyph: nil, signIn: nil, activity: nil)
         let plugin = ExternalPluginProvider(manifest: manifest) { _ in
@@ -56,18 +56,18 @@ struct UsageStorePluginTests {
         // The badge a settings row draws hangs off this flag: a real plugin
         // must never read as built-in, and anything else must never read as a
         // plugin.
-        #expect(store.providerSummaries.first { $0.id == "codemie-budget" }?.isPlugin == true)
+        #expect(store.providerSummaries.first { $0.id == "plugin-codemie-budget" }?.isPlugin == true)
         #expect(store.providerSummaries.first { $0.id == "stub-tool" }?.isPlugin == false)
     }
 
     @Test func registeringADisconnectedPluginStaysQuiet() async {
-        let (store, _, suite) = makeStore(disconnected: ["codemie-budget"])
+        let (store, _, suite) = makeStore(disconnected: ["plugin-codemie-budget"])
         defer { cleanup(suite) }
 
-        store.register(Stub(id: "codemie-budget"))
+        store.register(Stub(id: "plugin-codemie-budget"))
 
         #expect(store.snapshots.isEmpty)
-        #expect(store.providerSummaries.map(\.id) == ["codemie-budget"])
+        #expect(store.providerSummaries.map(\.id) == ["plugin-codemie-budget"])
         await store.refresh()
         #expect(!store.snapshots.contains { $0.hasReading })
     }
@@ -75,50 +75,50 @@ struct UsageStorePluginTests {
     @Test func registeringTwiceKeepsOneProvider() async {
         let (store, _, suite) = makeStore()
         defer { cleanup(suite) }
-        let plugin = Stub(id: "codemie-budget")
+        let plugin = Stub(id: "plugin-codemie-budget")
         store.register(plugin)
         store.register(plugin)
 
         await store.refresh()
 
-        #expect(store.snapshots.map(\.id) == ["codemie-budget"])
-        #expect(store.providerSummaries.map(\.id) == ["codemie-budget"])
+        #expect(store.snapshots.map(\.id) == ["plugin-codemie-budget"])
+        #expect(store.providerSummaries.map(\.id) == ["plugin-codemie-budget"])
         #expect(plugin.calls >= 1)
     }
 
     @Test func deregisterRemovesTheCellTheArchiveAndTheProvider() async {
         let (store, archive, suite) = makeStore()
         defer { cleanup(suite) }
-        store.register(Stub(id: "codemie-budget"))
+        store.register(Stub(id: "plugin-codemie-budget"))
         await store.refresh()
-        #expect(archive.load()["codemie-budget"] != nil)
+        #expect(archive.load()["plugin-codemie-budget"] != nil)
 
-        store.deregister(providerID: "codemie-budget")
+        store.deregister(providerID: "plugin-codemie-budget")
 
         #expect(store.snapshots.isEmpty)
         #expect(store.providerSummaries.isEmpty)
-        #expect(!store.knownIDs.contains("codemie-budget"))
-        #expect(archive.load()["codemie-budget"] == nil)
+        #expect(!store.knownIDs.contains("plugin-codemie-budget"))
+        #expect(archive.load()["plugin-codemie-budget"] == nil)
     }
 
     @Test func deregisteringAnUnknownIDIsANoOp() async {
         let (store, _, suite) = makeStore()
         defer { cleanup(suite) }
-        store.register(Stub(id: "codemie-budget"))
+        store.register(Stub(id: "plugin-codemie-budget"))
 
         store.deregister(providerID: "no-such-plugin")
 
-        #expect(store.snapshots.map(\.id) == ["codemie-budget"])
+        #expect(store.snapshots.map(\.id) == ["plugin-codemie-budget"])
     }
 
     @Test func aReregisteredPluginFetchesAgain() async {
         let (store, _, suite) = makeStore()
         defer { cleanup(suite) }
-        store.register(Stub(id: "codemie-budget"))
+        store.register(Stub(id: "plugin-codemie-budget"))
         await store.refresh()
-        store.deregister(providerID: "codemie-budget")
+        store.deregister(providerID: "plugin-codemie-budget")
 
-        let second = Stub(id: "codemie-budget")
+        let second = Stub(id: "plugin-codemie-budget")
         store.register(second)
         await store.refresh()
 

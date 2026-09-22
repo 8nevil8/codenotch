@@ -77,6 +77,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var miniMaxWeb: WebSessionProvider?
     /// Runtime-registered plugins (see `docs/design/plugin-protocol.md`).
     private var pluginCoordinator: PluginCoordinator?
+    /// What a plugin may not be named: every non-plugin provider, kept
+    /// current as custom endpoints come and go.
+    private var builtInProviders: BuiltInProviderSet?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Set here, not in the Info.plist: this call is applied at launch and
@@ -178,13 +181,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Frozen now, before plugins join the array: a closure over the
             // `var` would see them on later rescans and reject every plugin
             // as colliding with itself.
-            let builtInIDs = Set(allProviders.map(\.id))
-            let builtInDisplayNames = Set(allProviders.map(\.displayName))
+            let builtIns = BuiltInProviderSet()
+            builtIns.replace(with: allProviders)
             let registry = PluginRegistry(
                 directory: PluginRegistry.defaultDirectory(),
-                builtInIDs: { builtInIDs },
-                builtInDisplayNames: { builtInDisplayNames }
+                builtInIDs: { builtIns.ids },
+                builtInDisplayNames: { builtIns.displayNames }
             )
+            self.builtInProviders = builtIns
             let discovered = registry.scan()
             approvedPlugins = discovered.filter {
                 preferences.approvedHash(forPlugin: $0.manifest.id) == $0.contentHash
@@ -212,11 +216,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 .removeDuplicates()
                 .receive(on: RunLoop.main)
-                .sink { [weak store] _ in
+                .sink { [weak self, weak store] _ in
                     let stored = Preferences.storedCustomEndpoints()
                     let active = stored.filter(\.isEnabled)
                     let providers: [UsageProvider] = active.map { CustomEndpointProvider(endpoint: $0) }
                     store?.registerCustomProviders(providers)
+                    // A custom endpoint's id and name are taken from now on;
+                    // the plugins are re-checked against the new set.
+                    guard let self, let store else { return }
+                    self.builtInProviders?.replace(with: store.providers)
+                    self.pluginCoordinator?.rescan()
                 }
                 .store(in: &cancellables)
             deepSeek.onAuthenticated = { [weak store] in

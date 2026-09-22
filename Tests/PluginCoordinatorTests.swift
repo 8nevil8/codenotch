@@ -52,12 +52,12 @@ struct PluginCoordinatorTests {
         coordinator.start()
         defer { coordinator.stop() }
 
-        try writePlugin("codemie-budget", in: root)
+        try writePlugin("plugin-codemie-budget", in: root)
 
-        #expect(await waitFor { coordinator.pendingPlugins.map(\.id) == ["codemie-budget"] })
-        #expect(!store.knownIDs.contains("codemie-budget"),
+        #expect(await waitFor { coordinator.pendingPlugins.map(\.id) == ["plugin-codemie-budget"] })
+        #expect(!store.knownIDs.contains("plugin-codemie-budget"),
                 "an unapproved plugin must never reach the store")
-        #expect(!preferences.isConnected("codemie-budget"))
+        #expect(!preferences.isConnected("plugin-codemie-budget"))
     }
 
     @Test func approvingRegistersAndConnects() async throws {
@@ -71,13 +71,13 @@ struct PluginCoordinatorTests {
         coordinator.start()
         defer { coordinator.stop() }
 
-        try writePlugin("codemie-budget", in: root)
+        try writePlugin("plugin-codemie-budget", in: root)
         #expect(await waitFor { !coordinator.pendingPlugins.isEmpty })
 
-        coordinator.approve(pluginID: "codemie-budget")
+        coordinator.approve(pluginID: "plugin-codemie-budget")
 
-        #expect(store.knownIDs.contains("codemie-budget"))
-        #expect(preferences.isConnected("codemie-budget"))
+        #expect(store.knownIDs.contains("plugin-codemie-budget"))
+        #expect(preferences.isConnected("plugin-codemie-budget"))
         #expect(coordinator.pendingPlugins.isEmpty)
     }
 
@@ -88,17 +88,17 @@ struct PluginCoordinatorTests {
             UserDefaults().removePersistentDomain(forName: suite)
         }
         // Approve the exact build before the coordinator ever sees it.
-        try writePlugin("codemie-budget", in: root)
+        try writePlugin("plugin-codemie-budget", in: root)
         let scanned = registry.scan().first
         let hash = try #require(scanned?.contentHash)
-        preferences.approvePlugin("codemie-budget", hash: hash)
+        preferences.approvePlugin("plugin-codemie-budget", hash: hash)
 
         let coordinator = PluginCoordinator(registry: registry, store: store,
                                             preferences: preferences)
         coordinator.start()
         defer { coordinator.stop() }
 
-        #expect(await waitFor { store.knownIDs.contains("codemie-budget") })
+        #expect(await waitFor { store.knownIDs.contains("plugin-codemie-budget") })
         #expect(coordinator.pendingPlugins.isEmpty)
     }
 
@@ -108,20 +108,20 @@ struct PluginCoordinatorTests {
             try? FileManager.default.removeItem(at: root)
             UserDefaults().removePersistentDomain(forName: suite)
         }
-        try writePlugin("codemie-budget", in: root, version: "1")
+        try writePlugin("plugin-codemie-budget", in: root, version: "1")
         let hash = try #require(registry.scan().first?.contentHash)
-        preferences.approvePlugin("codemie-budget", hash: hash)
+        preferences.approvePlugin("plugin-codemie-budget", hash: hash)
 
         let coordinator = PluginCoordinator(registry: registry, store: store,
                                             preferences: preferences)
         coordinator.start()
         defer { coordinator.stop() }
-        #expect(await waitFor { store.knownIDs.contains("codemie-budget") })
+        #expect(await waitFor { store.knownIDs.contains("plugin-codemie-budget") })
 
-        try writePlugin("codemie-budget", in: root, version: "2")
+        try writePlugin("plugin-codemie-budget", in: root, version: "2")
 
-        #expect(await waitFor { coordinator.pendingPlugins.map(\.id) == ["codemie-budget"] })
-        #expect(!store.knownIDs.contains("codemie-budget"),
+        #expect(await waitFor { coordinator.pendingPlugins.map(\.id) == ["plugin-codemie-budget"] })
+        #expect(!store.knownIDs.contains("plugin-codemie-budget"),
                 "the old build's provider must be deregistered while pending")
     }
 
@@ -135,18 +135,18 @@ struct PluginCoordinatorTests {
                                             preferences: preferences)
         coordinator.start()
         defer { coordinator.stop() }
-        try writePlugin("codemie-budget", in: root)
+        try writePlugin("plugin-codemie-budget", in: root)
         #expect(await waitFor { !coordinator.pendingPlugins.isEmpty })
         let hash = try #require(coordinator.pendingPlugins.first?.contentHash)
-        coordinator.approve(pluginID: "codemie-budget")
-        #expect(store.knownIDs.contains("codemie-budget"))
+        coordinator.approve(pluginID: "plugin-codemie-budget")
+        #expect(store.knownIDs.contains("plugin-codemie-budget"))
 
-        coordinator.revoke(pluginID: "codemie-budget")
+        coordinator.revoke(pluginID: "plugin-codemie-budget")
 
-        #expect(!store.knownIDs.contains("codemie-budget"), "a revoked plugin must stop running")
-        #expect(preferences.approvedHash(forPlugin: "codemie-budget") == nil)
-        #expect(!preferences.isConnected("codemie-budget"))
-        #expect(coordinator.pendingPlugins.map(\.id) == ["codemie-budget"],
+        #expect(!store.knownIDs.contains("plugin-codemie-budget"), "a revoked plugin must stop running")
+        #expect(preferences.approvedHash(forPlugin: "plugin-codemie-budget") == nil)
+        #expect(!preferences.isConnected("plugin-codemie-budget"))
+        #expect(coordinator.pendingPlugins.map(\.id) == ["plugin-codemie-budget"],
                 "still on disk, so it is back to asking")
         #expect(coordinator.pendingPlugins.first?.contentHash == hash)
     }
@@ -157,24 +157,24 @@ struct PluginCoordinatorTests {
             try? FileManager.default.removeItem(at: root)
             UserDefaults().removePersistentDomain(forName: suite)
         }
-        let directory = try writePlugin("codemie-budget", in: root)
+        let directory = try writePlugin("plugin-codemie-budget", in: root)
         let hash = try #require(registry.scan().first?.contentHash)
-        preferences.approvePlugin("codemie-budget", hash: hash)
+        preferences.approvePlugin("plugin-codemie-budget", hash: hash)
         let coordinator = PluginCoordinator(registry: registry, store: store,
                                             preferences: preferences)
         coordinator.start()
         defer { coordinator.stop() }
-        #expect(await waitFor { store.knownIDs.contains("codemie-budget") })
+        #expect(await waitFor { store.knownIDs.contains("plugin-codemie-budget") })
 
         try FileManager.default.removeItem(at: directory)
-        #expect(await waitFor { !store.knownIDs.contains("codemie-budget") })
-        #expect(preferences.approvedHash(forPlugin: "codemie-budget") == nil,
+        #expect(await waitFor { !store.knownIDs.contains("plugin-codemie-budget") })
+        #expect(preferences.approvedHash(forPlugin: "plugin-codemie-budget") == nil,
                 "an approval lives exactly as long as the plugin directory")
 
         // The same bytes, dropped back in, ask again rather than run.
-        try writePlugin("codemie-budget", in: root)
-        #expect(await waitFor { coordinator.pendingPlugins.map(\.id) == ["codemie-budget"] })
-        #expect(!store.knownIDs.contains("codemie-budget"))
+        try writePlugin("plugin-codemie-budget", in: root)
+        #expect(await waitFor { coordinator.pendingPlugins.map(\.id) == ["plugin-codemie-budget"] })
+        #expect(!store.knownIDs.contains("plugin-codemie-budget"))
     }
 
     @Test func thePendingRowShowsTheSignInCommand() async throws {
@@ -187,10 +187,10 @@ struct PluginCoordinatorTests {
                                             preferences: preferences)
         coordinator.start()
         defer { coordinator.stop() }
-        let directory = root.appendingPathComponent("codemie-budget", isDirectory: true)
+        let directory = root.appendingPathComponent("plugin-codemie-budget", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try #"""
-        {"schema": 1, "id": "codemie-budget", "displayName": "A Plugin", "version": "1",
+        {"schema": 1, "id": "plugin-codemie-budget", "displayName": "A Plugin", "version": "1",
          "exec": {"path": "/bin/sh", "args": ["snapshot"]},
          "signIn": {"guidance": "g", "run": ["/bin/sh", "login.sh"]}}
         """#.write(to: directory.appendingPathComponent("plugin.json"), atomically: true, encoding: .utf8)
@@ -211,15 +211,15 @@ struct PluginCoordinatorTests {
         coordinator.start()
         defer { coordinator.stop() }
 
-        let directory = try writePlugin("codemie-budget", in: root)
-        #expect(await waitFor { coordinator.pendingPlugins.map(\.id) == ["codemie-budget"] })
+        let directory = try writePlugin("plugin-codemie-budget", in: root)
+        #expect(await waitFor { coordinator.pendingPlugins.map(\.id) == ["plugin-codemie-budget"] })
 
         try FileManager.default.removeItem(at: directory)
 
         #expect(await waitFor { coordinator.pendingPlugins.isEmpty })
-        #expect(!store.knownIDs.contains("codemie-budget"),
+        #expect(!store.knownIDs.contains("plugin-codemie-budget"),
                 "a pending plugin that disappears must never reach the store")
-        #expect(!preferences.isConnected("codemie-budget"))
+        #expect(!preferences.isConnected("plugin-codemie-budget"))
     }
 
     @Test func approvingAnUnknownPluginIsANoOp() async throws {
@@ -246,11 +246,11 @@ struct PluginCoordinatorTests {
             try? FileManager.default.removeItem(at: root)
             UserDefaults().removePersistentDomain(forName: suite)
         }
-        try writePlugin("codemie-budget", in: root)
+        try writePlugin("plugin-codemie-budget", in: root)
         let coordinator = PluginCoordinator(registry: registry, store: store,
                                             preferences: preferences)
         coordinator.bootstrap(approved: [], pending: registry.scan())
-        #expect(coordinator.pendingPlugins.map(\.id) == ["codemie-budget"])
+        #expect(coordinator.pendingPlugins.map(\.id) == ["plugin-codemie-budget"])
         coordinator.start()
         defer { coordinator.stop() }
 
@@ -258,9 +258,9 @@ struct PluginCoordinatorTests {
         // is well past the half-second debounce (same pattern as
         // PluginRegistryTests.aSeededPluginIsNotReportedAgain).
         try? await Task.sleep(nanoseconds: 3_000_000_000)
-        #expect(coordinator.pendingPlugins.map(\.id) == ["codemie-budget"])
-        #expect(!store.knownIDs.contains("codemie-budget"))
-        #expect(!preferences.isConnected("codemie-budget"))
+        #expect(coordinator.pendingPlugins.map(\.id) == ["plugin-codemie-budget"])
+        #expect(!store.knownIDs.contains("plugin-codemie-budget"))
+        #expect(!preferences.isConnected("plugin-codemie-budget"))
     }
 
     @Test func theCommandLineQuotesArgumentsSoWordBoundariesAreUnambiguous() {

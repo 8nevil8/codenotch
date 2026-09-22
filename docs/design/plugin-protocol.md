@@ -90,7 +90,7 @@ environment variable, in debug builds only.
 ```json
 {
   "schema": 1,
-  "id": "codemie-budget",
+  "id": "plugin-codemie-budget",
   "displayName": "CodeMie Budget",
   "version": "0.1.0",
   "exec": {
@@ -110,7 +110,7 @@ environment variable, in debug builds only.
 | field | required | meaning |
 |---|---|---|
 | `schema` | yes | Must be `1`. |
-| `id` | yes | `^[a-z0-9][a-z0-9-]*$`, ≤ 64 chars. The join key for ordering, connection state, archive, notifications. Must be stable across releases and must not equal a built-in provider id. |
+| `id` | yes | `^plugin-[a-z0-9][a-z0-9-]*$`, ≤ 64 chars in all. The join key for ordering, connection state, archive, notifications. Must be stable across releases. The `plugin-` namespace is reserved for plugins, so an id can never collide with a built-in provider, now or later; a manifest whose id or display name matches a provider present at the time — built-in or a custom endpoint the user has added — is refused, and re-checked whenever that set changes. |
 | `displayName` | yes | Shown in the notch tooltip and the settings row. 1–40 characters, no control characters, and not a built-in provider's name — compared as a skeleton, so lookalike scripts, accents, digits and invisible characters do not get "Claude" past the check. |
 | `version` | yes | Free-form, for diagnostics. |
 | `exec.path` | yes | Absolute path to an executable that exists, is executable, and passes the trust check (not a symlink, not group/world-writable) — inside the plugin directory, or one of `/bin/sh`, `/bin/bash`, `/usr/bin/osascript`. |

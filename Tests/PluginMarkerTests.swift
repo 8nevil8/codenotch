@@ -8,7 +8,7 @@ import Testing
 @MainActor
 struct PluginMarkerTests {
     private let manifest = PluginManifest(
-        schema: 1, id: "codemie-budget", displayName: "CodeMie Budget", version: "0.1.0",
+        schema: 1, id: "plugin-codemie-budget", displayName: "CodeMie Budget", version: "0.1.0",
         exec: PluginManifest.Exec(path: "/bin/sh", args: [], timeoutSeconds: nil),
         glyph: nil, signIn: nil, activity: nil)
 
@@ -40,7 +40,7 @@ struct PluginMarkerTests {
     }
 
     @Test func notificationsNameThePlugin() {
-        let alert = ThresholdAlert(threshold: 80, providerID: "codemie-budget",
+        let alert = ThresholdAlert(threshold: 80, providerID: "plugin-codemie-budget",
                                    providerName: "CodeMie Budget", windowLabel: "Budget",
                                    usedPercent: 81, resetsAt: nil, isPlugin: true)
         #expect(alert.notifiedName == "CodeMie Budget (plugin)")
@@ -48,7 +48,7 @@ struct PluginMarkerTests {
                                      windowLabel: "Session", usedPercent: 81, resetsAt: nil)
         #expect(builtIn.notifiedName == "Claude")
 
-        let event = UsageAlertEvent(providerID: "codemie-budget", providerName: "CodeMie Budget",
+        let event = UsageAlertEvent(providerID: "plugin-codemie-budget", providerName: "CodeMie Budget",
                                     windowLabel: "Budget", glyph: .external,
                                     previousFraction: 1, currentFraction: 0, resetsAt: nil)
         #expect(event.notifiedName == "CodeMie Budget (plugin)")
@@ -57,7 +57,7 @@ struct PluginMarkerTests {
     @Test func theThresholdNotifierCarriesTheMark() {
         var delivered: [ThresholdAlert] = []
         let notifier = ThresholdNotifier(deliver: { delivered.append($0) })
-        var snapshot = ProviderSnapshot(id: "codemie-budget", displayName: "CodeMie Budget",
+        var snapshot = ProviderSnapshot(id: "plugin-codemie-budget", displayName: "CodeMie Budget",
                                         glyph: .external, fidelity: .official, status: .ok,
                                         windows: [LimitWindow(id: "b", label: "Budget", usedFraction: 0.85)])
         snapshot.headlineID = "b"

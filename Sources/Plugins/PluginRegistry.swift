@@ -357,3 +357,27 @@ final class PluginRegistry {
         onChange?(change)
     }
 }
+
+/// The ids and display names a plugin may not claim: every provider that is
+/// not itself a plugin, as they stand *now*. Not frozen at launch, because
+/// custom endpoints join and leave while the app runs and a name the user
+/// gives one of them is taken from then on. Read from the registry's queue,
+/// written from the main actor, hence the lock.
+final class BuiltInProviderSet: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedIDs: Set<String> = []
+    private var storedDisplayNames: Set<String> = []
+
+    var ids: Set<String> { lock.withLock { storedIDs } }
+    var displayNames: Set<String> { lock.withLock { storedDisplayNames } }
+
+    /// Plugins are left out: a registered plugin must not become a built-in
+    /// its own next rescan collides with.
+    func replace(with providers: [UsageProvider]) {
+        let builtIns = providers.filter { !$0.isPlugin }
+        lock.withLock {
+            storedIDs = Set(builtIns.map(\.id))
+            storedDisplayNames = Set(builtIns.map(\.displayName))
+        }
+    }
+}

@@ -1742,8 +1742,8 @@ in `NotchLayoutTests`.
 - [x] `ActivityCoordinator.setMonitor`/`removeMonitor` — plugin manifests can
       attach a `claudeSessions` activity monitor
 - [x] Reference plugin ships with its vendor: `integrations/codenotch` in
-      `codemie-ai/codemie-code` registers `codemie-budget` (all buckets with a
-      Total headline) and `codemie-claude` (per-bucket session spending),
+      `codemie-ai/codemie-code` registers `plugin-codemie-budget` (all buckets with a
+      Total headline) and `plugin-codemie-claude` (per-bucket session spending),
       reading CodeMie's own SSO credentials and the `budget_usage` endpoint
       the CodeMie statusline uses
 - [x] Tests: 45 app-side (swift-testing), 49 plugin-side, plus a machine-local

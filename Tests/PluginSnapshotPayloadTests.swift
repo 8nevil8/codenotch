@@ -4,7 +4,7 @@ import Testing
 
 struct PluginSnapshotPayloadTests {
     private let manifest = PluginManifest(
-        schema: 1, id: "codemie-budget", displayName: "CodeMie Budget", version: "0.1.0",
+        schema: 1, id: "plugin-codemie-budget", displayName: "CodeMie Budget", version: "0.1.0",
         exec: PluginManifest.Exec(path: "/bin/sh", args: ["snapshot"], timeoutSeconds: nil),
         glyph: nil, signIn: nil, activity: nil)
 
@@ -31,7 +31,7 @@ struct PluginSnapshotPayloadTests {
 
         let snapshot = decoded.snapshot(for: manifest)
 
-        #expect(snapshot.id == "codemie-budget")
+        #expect(snapshot.id == "plugin-codemie-budget")
         #expect(snapshot.displayName == "CodeMie Budget")
         #expect(snapshot.glyph == .external)
         #expect(snapshot.fidelity == .official)

@@ -42,12 +42,12 @@ struct PluginRegistryTests {
     @Test func scanFindsAValidPlugin() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let directory = try writePlugin("codemie-budget", in: root, displayName: "CodeMie Budget")
+        let directory = try writePlugin("plugin-codemie-budget", in: root, displayName: "CodeMie Budget")
 
         let found = PluginRegistry(directory: root, builtInIDs: { [] }).scan()
 
         #expect(found.count == 1)
-        #expect(found.first?.manifest.id == "codemie-budget")
+        #expect(found.first?.manifest.id == "plugin-codemie-budget")
         #expect(found.first?.manifest.displayName == "CodeMie Budget")
         #expect(found.first?.manifest.glyph?.opticalScale == 0.9)
         // Not `==` on the URLs: `contentsOfDirectory` and `temporaryDirectory`
@@ -58,7 +58,7 @@ struct PluginRegistryTests {
     @Test func scanSkipsAnInvalidManifestAndKeepsTheValidOne() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        try writePlugin("good-plugin", in: root)
+        try writePlugin("plugin-good", in: root)
         let bad = root.appendingPathComponent("bad-plugin", isDirectory: true)
         try FileManager.default.createDirectory(at: bad, withIntermediateDirectories: true)
         try #"{"schema": 99, "id": "bad-plugin"}"#.write(
@@ -66,7 +66,7 @@ struct PluginRegistryTests {
 
         let found = PluginRegistry(directory: root, builtInIDs: { [] }).scan()
 
-        #expect(found.map(\.manifest.id) == ["good-plugin"])
+        #expect(found.map(\.manifest.id) == ["plugin-good"])
     }
 
     @Test func scanSkipsACollisionWithABuiltIn() throws {
@@ -88,13 +88,13 @@ struct PluginRegistryTests {
     @Test func twoPluginsWithTheSameIDDoNotCrashTheScan() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        try writePlugin("codemie-budget", in: root)
+        try writePlugin("plugin-codemie-budget", in: root)
         // A second directory declaring the same manifest id. One buggy
         // installer must not take the process down with it.
         let twin = root.appendingPathComponent("codemie-budget-twin", isDirectory: true)
         try FileManager.default.createDirectory(at: twin, withIntermediateDirectories: true)
         let manifest = #"""
-        {"schema": 1, "id": "codemie-budget", "displayName": "Twin", "version": "1",
+        {"schema": 1, "id": "plugin-codemie-budget", "displayName": "Twin", "version": "1",
          "exec": {"path": "/bin/sh", "args": ["snapshot"]}}
         """#
         try manifest.write(to: twin.appendingPathComponent("plugin.json"),
@@ -103,7 +103,7 @@ struct PluginRegistryTests {
         let found = PluginRegistry(directory: root, builtInIDs: { [] }).scan()
 
         #expect(found.count == 1)
-        #expect(found.first?.manifest.id == "codemie-budget")
+        #expect(found.first?.manifest.id == "plugin-codemie-budget")
     }
 
     // MARK: - Folder trust
@@ -114,7 +114,7 @@ struct PluginRegistryTests {
             try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
             try? FileManager.default.removeItem(at: root)
         }
-        try writePlugin("codemie-budget", in: root)
+        try writePlugin("plugin-codemie-budget", in: root)
         try FileManager.default.setAttributes([.posixPermissions: 0o777], ofItemAtPath: root.path)
         #expect(PluginRegistry(directory: root, builtInIDs: { [] }).scan().isEmpty)
     }
@@ -128,9 +128,9 @@ struct PluginRegistryTests {
             try? FileManager.default.removeItem(at: root)
             try? FileManager.default.removeItem(at: outside)
         }
-        let real = try writePlugin("codemie-budget", in: outside)
+        let real = try writePlugin("plugin-codemie-budget", in: outside)
         try FileManager.default.createSymbolicLink(
-            at: root.appendingPathComponent("codemie-budget", isDirectory: true),
+            at: root.appendingPathComponent("plugin-codemie-budget", isDirectory: true),
             withDestinationURL: real)
         #expect(PluginRegistry(directory: root, builtInIDs: { [] }).scan().isEmpty)
     }
@@ -138,7 +138,7 @@ struct PluginRegistryTests {
     @Test func scanSkipsAGroupWritableManifest() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let directory = try writePlugin("codemie-budget", in: root)
+        let directory = try writePlugin("plugin-codemie-budget", in: root)
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o664],
             ofItemAtPath: directory.appendingPathComponent("plugin.json").path)
@@ -162,8 +162,8 @@ struct PluginRegistryTests {
     @Test func theContentHashCoversTheManifestAndTheExecutable() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let script = try writeScript("echo one", for: "codemie-budget", in: root)
-        try writePlugin("codemie-budget", in: root, execPath: script.path)
+        let script = try writeScript("echo one", for: "plugin-codemie-budget", in: root)
+        try writePlugin("plugin-codemie-budget", in: root, execPath: script.path)
         let registry = PluginRegistry(directory: root, builtInIDs: { [] })
         let first = registry.scan().first?.contentHash
 
@@ -180,7 +180,7 @@ struct PluginRegistryTests {
         // `/bin/sh helper.sh`: the interpreter is root-owned and unhashed, so
         // the script it runs is the code — and it is in the hash like
         // everything else in the folder, however deep.
-        let directory = try writePlugin("codemie-budget", in: root, execPath: "/bin/sh")
+        let directory = try writePlugin("plugin-codemie-budget", in: root, execPath: "/bin/sh")
         let nested = directory.appendingPathComponent("lib", isDirectory: true)
         try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
         let helper = nested.appendingPathComponent("helper.sh")
@@ -201,7 +201,7 @@ struct PluginRegistryTests {
     @Test func aDSStoreDoesNotChangeTheHash() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let directory = try writePlugin("codemie-budget", in: root)
+        let directory = try writePlugin("plugin-codemie-budget", in: root)
         let registry = PluginRegistry(directory: root, builtInIDs: { [] })
         let first = registry.scan().first?.contentHash
 
@@ -220,15 +220,15 @@ struct PluginRegistryTests {
         let script = root.appendingPathComponent("tool.sh")
         try "#!/bin/sh\necho one\n".write(to: script, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
-        try writePlugin("codemie-budget", in: root, execPath: script.path)
+        try writePlugin("plugin-codemie-budget", in: root, execPath: script.path)
         #expect(PluginRegistry(directory: root, builtInIDs: { [] }).scan().isEmpty)
     }
 
     @Test func isCurrentSeesAnEditAndAnUntrustedFolder() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let script = try writeScript("echo one", for: "codemie-budget", in: root)
-        let directory = try writePlugin("codemie-budget", in: root, execPath: script.path)
+        let script = try writeScript("echo one", for: "plugin-codemie-budget", in: root)
+        let directory = try writePlugin("plugin-codemie-budget", in: root, execPath: script.path)
         let registry = PluginRegistry(directory: root, builtInIDs: { [] })
         let plugin = try #require(registry.scan().first)
         #expect(registry.isCurrent(plugin))
@@ -246,7 +246,7 @@ struct PluginRegistryTests {
     @Test func theContentHashCoversTheManifestBytes() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let directory = try writePlugin("codemie-budget", in: root)
+        let directory = try writePlugin("plugin-codemie-budget", in: root)
         let registry = PluginRegistry(directory: root, builtInIDs: { [] })
         let first = registry.scan().first?.contentHash
 
@@ -266,7 +266,7 @@ struct PluginRegistryTests {
     @Test func scanSkipsAPluginWhoseExecutableIsUnreadable() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let script = try writeScript("echo one", for: "codemie-budget", in: root)
+        let script = try writeScript("echo one", for: "plugin-codemie-budget", in: root)
         // Execute-only and user-owned: passes validation's executable and
         // trust checks, but `Data(contentsOf:)` fails — and an unhashable
         // binary must not register.
@@ -274,15 +274,15 @@ struct PluginRegistryTests {
         defer {
             try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
         }
-        try writePlugin("codemie-budget", in: root, execPath: script.path)
+        try writePlugin("plugin-codemie-budget", in: root, execPath: script.path)
         #expect(PluginRegistry(directory: root, builtInIDs: { [] }).scan().isEmpty)
     }
 
     @Test func anExecutableSwapReportsAReregistration() async throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let script = try writeScript("echo one", for: "codemie-budget", in: root)
-        try writePlugin("codemie-budget", in: root, execPath: script.path)
+        let script = try writeScript("echo one", for: "plugin-codemie-budget", in: root)
+        try writePlugin("plugin-codemie-budget", in: root, execPath: script.path)
         let registry = PluginRegistry(directory: root, builtInIDs: { [] })
         registry.seed(registry.scan())
 
@@ -293,8 +293,8 @@ struct PluginRegistryTests {
 
         try "#!/bin/sh\necho two\n".write(to: script, atomically: true, encoding: .utf8)
         #expect(await waitFor {
-            changes.removedIDs().contains("codemie-budget")
-                && changes.addedIDs().contains("codemie-budget")
+            changes.removedIDs().contains("plugin-codemie-budget")
+                && changes.addedIDs().contains("plugin-codemie-budget")
         })
     }
 
@@ -311,20 +311,20 @@ struct PluginRegistryTests {
         registry.start()
         defer { registry.stop() }
 
-        try writePlugin("codemie-budget", in: root)
-        #expect(await waitFor { changes.addedIDs().contains("codemie-budget") })
+        try writePlugin("plugin-codemie-budget", in: root)
+        #expect(await waitFor { changes.addedIDs().contains("plugin-codemie-budget") })
 
-        try FileManager.default.removeItem(at: root.appendingPathComponent("codemie-budget", isDirectory: true))
-        #expect(await waitFor { changes.removedIDs().contains("codemie-budget") })
+        try FileManager.default.removeItem(at: root.appendingPathComponent("plugin-codemie-budget", isDirectory: true))
+        #expect(await waitFor { changes.removedIDs().contains("plugin-codemie-budget") })
 
-        #expect(changes.addedIDs() == ["codemie-budget"],
+        #expect(changes.addedIDs() == ["plugin-codemie-budget"],
                 "a seeded set must not be re-reported")
     }
 
     @Test func aSeededPluginIsNotReportedAgain() async throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        try writePlugin("codemie-budget", in: root)
+        try writePlugin("plugin-codemie-budget", in: root)
         let registry = PluginRegistry(directory: root, builtInIDs: { [] })
         registry.seed(registry.scan())
 
@@ -350,7 +350,7 @@ struct PluginRegistryTests {
 
         // A write after `stop` must not be reported: the watches are gone and
         // a late in-flight event must not arm a rescan behind `stop`'s back.
-        try writePlugin("codemie-budget", in: root)
+        try writePlugin("plugin-codemie-budget", in: root)
         try? await Task.sleep(nanoseconds: 2_000_000_000)
         #expect(changes.isEmpty())
     }
@@ -380,7 +380,7 @@ struct PluginRegistryTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let elsewhere = try makeRoot()
         defer { try? FileManager.default.removeItem(at: elsewhere) }
-        let directory = try writePlugin("codemie-budget", in: root)
+        let directory = try writePlugin("plugin-codemie-budget", in: root)
         // Whatever `lib` points at is not in the hash, so nothing the
         // plugin runs through it is pinned.
         try FileManager.default.createSymbolicLink(
@@ -392,7 +392,7 @@ struct PluginRegistryTests {
     @Test func scanAcceptsASymlinkThatStaysInsideTheDirectory() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let directory = try writePlugin("codemie-budget", in: root)
+        let directory = try writePlugin("plugin-codemie-budget", in: root)
         // `node_modules/.bin` style: the target is in the hash too.
         try FileManager.default.createSymbolicLink(
             at: directory.appendingPathComponent("icon.png"),
@@ -404,11 +404,53 @@ struct PluginRegistryTests {
     @Test func scanSkipsAPluginContainingANonRegularFile() throws {
         let root = try makeRoot()
         defer { try? FileManager.default.removeItem(at: root) }
-        let directory = try writePlugin("codemie-budget", in: root)
+        let directory = try writePlugin("plugin-codemie-budget", in: root)
         // A FIFO with no writer blocks any reader forever; the hash must
         // refuse the entry rather than read it.
         #expect(mkfifo(directory.appendingPathComponent("pipe").path, 0o600) == 0)
         let registry = PluginRegistry(directory: root, builtInIDs: { [] })
         #expect(registry.scan().isEmpty)
+    }
+
+    // MARK: - The built-in set is live
+
+    @Test func aBuiltInThatAppearsLaterCollidesOnTheNextScan() throws {
+        let root = try makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writePlugin("plugin-codemie-budget", in: root, displayName: "Budget")
+        let builtIns = BuiltInProviderSet()
+        let registry = PluginRegistry(directory: root,
+                                      builtInIDs: { builtIns.ids },
+                                      builtInDisplayNames: { builtIns.displayNames })
+        #expect(registry.scan().count == 1)
+
+        // A custom endpoint the user names "Budget" after launch.
+        builtIns.replace(with: [RegistryStub(id: "custom-endpoint-1", displayName: "Budget")])
+        #expect(registry.scan().isEmpty, "a name taken after launch is still taken")
+    }
+
+    @Test func theBuiltInSetLeavesPluginsOut() {
+        let builtIns = BuiltInProviderSet()
+        let plugin = ExternalPluginProvider(
+            manifest: PluginManifest(schema: 1, id: "plugin-x", displayName: "X", version: "1",
+                                     exec: PluginManifest.Exec(path: "/bin/sh", args: [], timeoutSeconds: nil),
+                                     glyph: nil, signIn: nil, activity: nil),
+            run: { _ in ExternalPluginProvider.ExecResult(status: 0, stdout: Data(), stderr: Data()) })
+        builtIns.replace(with: [RegistryStub(id: "claude", displayName: "Claude"), plugin])
+        // A registered plugin must not become a "built-in" that its own next
+        // rescan collides with.
+        #expect(builtIns.ids == ["claude"])
+        #expect(builtIns.displayNames == ["Claude"])
+    }
+}
+
+private final class RegistryStub: UsageProvider, @unchecked Sendable {
+    let id: String
+    let displayName: String
+    let glyph = ProviderGlyph.claude
+    init(id: String, displayName: String) { self.id = id; self.displayName = displayName }
+    func account() -> ProviderAccount? { nil }
+    func fetchSnapshot() async throws -> ProviderSnapshot {
+        ProviderSnapshot(id: id, displayName: displayName, glyph: glyph, fidelity: .official, status: .ok, windows: [])
     }
 }

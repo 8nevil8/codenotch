@@ -11,7 +11,7 @@ struct PluginManifestTests {
     }
 
     private func manifestJSON(
-        id: String = "codemie-budget",
+        id: String = "plugin-codemie-budget",
         schema: Int = 1,
         displayName: String = "CodeMie Budget",
         execPath: String = "/bin/sh",
@@ -47,7 +47,7 @@ struct PluginManifestTests {
         let manifest = try decode(manifestJSON(glyph: "glyph.png"))
 
         #expect(manifest.schema == 1)
-        #expect(manifest.id == "codemie-budget")
+        #expect(manifest.id == "plugin-codemie-budget")
         #expect(manifest.displayName == "CodeMie Budget")
         #expect(manifest.exec.path == "/bin/sh")
         #expect(manifest.exec.args == ["snapshot"])
@@ -69,14 +69,19 @@ struct PluginManifestTests {
 
     // MARK: - ID shape
 
-    @Test(arguments: ["claude", "codemie-budget", "a", "a1", "1a", "codemie-claude-2"])
+    /// Every plugin id starts with `plugin-`: a namespace no built-in will
+    /// ever use, so a plugin cannot claim an id a future built-in takes.
+    @Test(arguments: ["plugin-claude", "plugin-codemie-budget", "plugin-a", "plugin-a1", "plugin-1a",
+                      "plugin-codemie-claude-2"])
     func validIDs(id: String) {
         #expect(PluginManifest.isValidID(id))
     }
 
     @Test(arguments: ["", "Codemie", "-codemie", "codemie_claude", "codemie claude",
-                      "codemie.budget", String(repeating: "a", count: 65),
-                      "caf\u{301}", "克劳德"])
+                      "codemie.budget", "plugin-" + String(repeating: "a", count: 58),
+                      "caf\u{301}", "克劳德",
+                      // Outside the namespace, or the bare namespace.
+                      "claude", "codemie-budget", "plugin", "plugin-", "Plugin-x", "plugin--"])
     func invalidIDs(id: String) {
         #expect(!PluginManifest.isValidID(id))
     }
@@ -112,9 +117,11 @@ struct PluginManifestTests {
     @Test func rejectsACollisionWithABuiltIn() throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let manifest = try decode(manifestJSON(id: "claude"))
-        #expect(throws: PluginManifest.ValidationError.collidesWithBuiltIn("claude")) {
-            try manifest.validated(builtInIDs: ["claude"], pluginDirectory: directory)
+        // The namespace keeps built-ins out of the way by construction; the
+        // check still holds the line should one ever wander in.
+        let manifest = try decode(manifestJSON(id: "plugin-claude"))
+        #expect(throws: PluginManifest.ValidationError.collidesWithBuiltIn("plugin-claude")) {
+            try manifest.validated(builtInIDs: ["plugin-claude"], pluginDirectory: directory)
         }
     }
 
@@ -170,7 +177,7 @@ struct PluginManifestTests {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let data = Data(#"""
-        {"schema": 1, "id": "x", "displayName": "X", "version": "1",
+        {"schema": 1, "id": "plugin-x", "displayName": "X", "version": "1",
          "exec": {"path": "/bin/sh", "args": []},
          "activity": {"type": "watchDirectory", "configDir": "/tmp"}}
         """#.utf8)
